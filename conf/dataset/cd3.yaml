@@ -1,0 +1,4 @@
+channel: CD3
+mode: mask
+transforms:
+  - distance_transform

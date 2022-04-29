@@ -1,0 +1,23 @@
+version: "3.7"
+services:
+  main:
+    build:
+      context: .
+      dockerfile: "Dockerfile"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    ports:
+      - "8888:8888"
+      - "9999:9999"
+    shm_size: "1g"
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    volumes:
+      - "~/Desktop/hoechstgan:/app"
+      - "~/Desktop/data:/data"

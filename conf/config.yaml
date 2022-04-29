@@ -1,0 +1,18 @@
+defaults:
+  - _self_
+  - dataset@dataset.input: h3342
+  - dataset@dataset.output: cd3
+
+data_folder: ${oc.env:DATA_FOLDER,/Users/georg/Desktop/Scratch.nosync}
+dataset:
+  data_root: ${data_folder}/patches
+  input:
+    channel: H3342
+    mode: raw
+    transforms: []
+    num_channels: 1
+  output:
+    channel: CD3
+    mode: mask
+    transforms: []
+    num_channels: 1
