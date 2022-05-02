@@ -10,19 +10,25 @@ class CustomDatasetDataLoader():
         self.dataset = Dataset(cfg)
         self.dataloader = torch.utils.data.DataLoader(
             self.dataset,
-            batch_size=opt.batch_size,
-            shuffle=not opt.serial_batches,
-            num_workers=int(opt.num_threads))
+            batch_size=cfg.dataset.batch_size,
+            shuffle=cfg.dataset.shuffle,
+            num_workers=int(cfg.dataset.num_threads))
 
     def load_data(self):
         return self
 
     def __len__(self):
-        return min(len(self.dataset), self.cfg.max_dataset_size)
+        return min(len(self.dataset), self.cfg.dataset.max_size)
 
     def __iter__(self):
         """Return a batch of data"""
         for i, data in enumerate(self.dataloader):
-            if i * self.opt.batch_size >= self.opt.max_dataset_size:
+            if i * self.cfg.dataset.batch_size >= self.cfg.dataset.max_size:
                 break
             yield data
+
+
+def create_dataset(cfg):
+    data_loader = CustomDatasetDataLoader(cfg)
+    dataset = data_loader.load_data()
+    return dataset
