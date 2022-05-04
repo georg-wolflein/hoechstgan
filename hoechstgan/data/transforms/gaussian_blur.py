@@ -5,10 +5,11 @@ from PIL import Image
 from .transforms import BaseTransform
 
 
-class DistanceTransform(BaseTransform):
+class GaussianBlur(BaseTransform):
 
     def forward(self, img):
-        img = ndimage.distance_transform_edt(img)
+        sigma = self.opt.get("sigma", 5)
+        img = ndimage.gaussian_filter(img, sigma=sigma)
         if img.max() != 0.:
             img = img / img.max() * 255
         img = img.astype(np.uint8)
@@ -16,4 +17,4 @@ class DistanceTransform(BaseTransform):
         return img
 
 
-__export__ = DistanceTransform
+__export__ = GaussianBlur

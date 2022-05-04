@@ -45,7 +45,7 @@ generator:
 continue_train: false
 verbose: true
 log_freq: 100 # log metrics every n iterations
-visualize_freq: 400 # log visualizations every n iterations, must be a multiple of log_freq
+visualize_freq: 5000 # log visualizations every n iterations, must be a multiple of log_freq
 save_epoch_freq: 5                              
 save_latest_freq: 5000 
 save_by_iter: false # if false, save only the latest model     

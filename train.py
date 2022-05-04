@@ -59,7 +59,7 @@ def train(cfg: DictConfig) -> None:
 
         model.update_learning_rate()  # update learning rates at end of every epoch
         print(
-            f"End of epoch {epoch:d} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time:d} sec")
+            f"End of epoch {epoch} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time} sec")
 
 
 if __name__ == "__main__":

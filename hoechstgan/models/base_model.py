@@ -1,4 +1,5 @@
 import os
+import shutil
 import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
@@ -35,6 +36,7 @@ class BaseModel(ABC):
             if self.gpus else torch.device('cpu')  # get device name: CPU or GPU
         # Save all the checkpoints to save_dir
         self.save_dir = Path(cfg.checkpoints_dir) / cfg.name
+        self.save_dir.mkdir(parents=True, exist_ok=True)
         torch.backends.cudnn.benchmark = True
         self.loss_names = []
         self.model_names = []
@@ -127,16 +129,13 @@ class BaseModel(ABC):
         return errors_ret
 
     def save_networks(self, epoch):
-        """Save all the networks to the disk.
-
-        Parameters:
-            epoch (int) -- current epoch; used in the file name '%s_net_%s.pth' % (epoch, name)
-        """
+        if isinstance(epoch, int):
+            epoch = f"{epoch:03d}"
         for name in self.model_names:
             if isinstance(name, str):
-                save_filename = '%s_net_%s.pth' % (epoch, name)
-                save_path = os.path.join(self.save_dir, save_filename)
-                net = getattr(self, 'net' + name)
+                save_filename = f"{epoch}_net_{name}.pth"
+                save_path = self.save_dir / save_filename
+                net = getattr(self, "net" + name)
 
                 if len(self.gpus) > 0 and torch.cuda.is_available():
                     torch.save(net.module.cpu().state_dict(), save_path)
@@ -152,14 +151,14 @@ class BaseModel(ABC):
         """
         for name in self.model_names:
             if isinstance(name, str):
-                load_filename = '%s_net_%s.pth' % (epoch, name)
-                load_path = os.path.join(self.save_dir, load_filename)
-                net = getattr(self, 'net' + name)
+                load_filename = f"{epoch:03d}_net_{name}.pth"
+                load_path = self.save_dir / load_filename
+                net = getattr(self, "net" + name)
                 if isinstance(net, torch.nn.DataParallel):
                     net = net.module
-                print('loading the model from %s' % load_path)
+                print(f"loading the model from {load_path}")
                 state_dict = torch.load(load_path, map_location=self.device)
-                if hasattr(state_dict, '_metadata'):
+                if hasattr(state_dict, "_metadata"):
                     del state_dict._metadata
 
                 net.load_state_dict(state_dict)
