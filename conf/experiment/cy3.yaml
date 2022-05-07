@@ -1,0 +1,4 @@
+# @package _global_
+defaults:
+  - override /dataset@dataset.output: cy3
+name: cy3

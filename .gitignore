@@ -1,6 +1,7 @@
 /.vscode/
 /outputs/
 /wandb/
+/multirun/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
