@@ -1,0 +1,5 @@
+defaults:
+- config.yaml
+- _self_
+
+is_train: true

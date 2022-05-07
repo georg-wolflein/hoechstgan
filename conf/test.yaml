@@ -1,0 +1,8 @@
+defaults:
+- config.yaml
+- _self_
+
+is_train: false
+load_checkpoint: latest
+# dataset:
+#   shuffle: false

@@ -1,2 +1,3 @@
-channel: Cy3
-mode: raw
+props:
+  channel: Cy3
+  mode: raw

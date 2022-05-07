@@ -1,4 +1,6 @@
-channel: CD3
-mode: mask
+props:
+  channel: CD3
+  mode: mask
+  mask_type: cells
 transforms:
   - distance_transform

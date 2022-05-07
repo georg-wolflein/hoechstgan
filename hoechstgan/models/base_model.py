@@ -42,7 +42,6 @@ class BaseModel(ABC):
         self.model_names = []
         self.visual_names = []
         self.optimizers = []
-        self.image_paths = []
         self.metric = 0  # used for learning rate policy 'plateau'
 
     @abstractmethod
@@ -69,9 +68,11 @@ class BaseModel(ABC):
         if self.is_train:
             self.schedulers = [networks.get_scheduler(
                 optimizer, cfg) for optimizer in self.optimizers]
-        if not self.is_train or cfg.continue_train:
-            load_suffix = 'iter_%d' % cfg.load_iter if cfg.load_iter > 0 else cfg.epoch
-            self.load_networks(load_suffix)
+        if not self.is_train or cfg.load_checkpoint:
+            prefix = "latest"
+            if cfg.load_checkpoint == "epoch":
+                prefix = int(cfg.initial_epoch)
+            self.load_networks(prefix)
         self.print_networks(cfg.verbose)
 
     def eval(self):
@@ -94,10 +95,6 @@ class BaseModel(ABC):
     def compute_visuals(self):
         """Calculate additional output images for visdom and HTML visualization"""
         pass
-
-    def get_image_paths(self):
-        """ Return image paths that are used to load current data"""
-        return self.image_paths
 
     def update_learning_rate(self):
         """Update learning rates for all the networks; called at the end of every epoch"""
@@ -144,14 +141,11 @@ class BaseModel(ABC):
                     torch.save(net.cpu().state_dict(), save_path)
 
     def load_networks(self, epoch):
-        """Load all the networks from the disk.
-
-        Parameters:
-            epoch (int) -- current epoch; used in the file name '%s_net_%s.pth' % (epoch, name)
-        """
+        if isinstance(epoch, int):
+            epoch = f"{epoch:03d}"
         for name in self.model_names:
             if isinstance(name, str):
-                load_filename = f"{epoch:03d}_net_{name}.pth"
+                load_filename = f"{epoch}_net_{name}.pth"
                 load_path = self.save_dir / load_filename
                 net = getattr(self, "net" + name)
                 if isinstance(net, torch.nn.DataParallel):

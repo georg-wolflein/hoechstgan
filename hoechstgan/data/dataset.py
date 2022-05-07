@@ -4,14 +4,7 @@ from PIL import Image
 from omegaconf import DictConfig
 
 from .transforms import get_transform
-
-
-def _get_channel_file(metadata: dict, channel_name: str, channel_type: str) -> str:
-    for img in metadata["images"]:
-        if img["channel"] == channel_name and img["type"] == channel_type:
-            return img["file"]
-    raise Exception(
-        f"Did not find {channel_type=} and {channel_name=} in metadata ({metadata})")
+from ..util.dataset import get_channel_file_from_metadata
 
 
 class Dataset:
@@ -29,12 +22,13 @@ class Dataset:
 
             def load_channel_img(ds_cfg):
                 path = json_path.parent / \
-                    _get_channel_file(metadata, ds_cfg.channel, ds_cfg.mode)
+                    get_channel_file_from_metadata(
+                        metadata, **ds_cfg.props)
                 img = Image.open(path).convert("RGB")
-                return img, str(path)
+                return img
 
-            A, path_A = load_channel_img(self.cfg.dataset.input)
-            B, path_B = load_channel_img(self.cfg.dataset.output)
+            A = load_channel_img(self.cfg.dataset.input)
+            B = load_channel_img(self.cfg.dataset.output)
 
             A_transform = get_transform(self.cfg, self.cfg.dataset.input)
             B_transform = get_transform(self.cfg, self.cfg.dataset.output)
@@ -42,7 +36,7 @@ class Dataset:
             A = A_transform(A)
             B = B_transform(B)
 
-            return {"A": A, "B": B, "path_A": path_A, "path_B": path_B}
+            return {"A": A, "B": B, "json_files": str(json_path)}
 
     def __len__(self):
         return len(self.json_paths)

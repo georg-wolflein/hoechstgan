@@ -48,7 +48,6 @@ class Pix2PixModel(BaseModel):
         """
         self.real_A = input["A"].to(self.device)
         self.real_B = input["B"].to(self.device)
-        self.image_paths = input["path_A"]
 
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""

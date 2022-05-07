@@ -7,7 +7,7 @@ from hoechstgan.data import create_dataset
 from hoechstgan.util.logging import ModelLogger
 
 
-@hydra.main(config_path="conf", config_name="config")
+@hydra.main(config_path="conf", config_name="train")
 def train(cfg: DictConfig) -> None:
     assert cfg.visualize_freq % cfg.log_freq == 0
     dataset = create_dataset(cfg)
