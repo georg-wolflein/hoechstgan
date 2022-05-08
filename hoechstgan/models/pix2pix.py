@@ -18,7 +18,10 @@ class Pix2PixModel(BaseModel):
 
     def __init__(self, cfg):
         BaseModel.__init__(self, cfg)
-        self.loss_names = ["G_GAN", "G_L1", "D_real", "D_fake"]
+        self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
+        self.loss_names = ["G_GAN", "G_ground_truth",
+                           *(f"G_ground_truth_{x}" for x in self.generator_gt_losses),
+                           "D_real", "D_fake"]
         self.visual_names = ["real_A", "fake_B", "real_B"]
         if self.is_train:
             self.model_names = ['G', 'D']
@@ -34,7 +37,11 @@ class Pix2PixModel(BaseModel):
 
             # define loss functions
             self.criterionGAN = networks.GANLoss("vanilla").to(self.device)
-            self.criterionL1 = torch.nn.L1Loss()
+            self.criteria_ground_truth = {
+                "l1": torch.nn.L1Loss(),
+                "l2": torch.nn.MSELoss(),
+                "kl": torch.nn.KLDivLoss()  # TODO: check that order is correct (i.e. KL(fake, real))
+            }
             # initialize optimizers; schedulers will be automatically created by function <BaseModel.setup>.
             self.optimizer_G = torch.optim.Adam(
                 self.netG.parameters(), lr=cfg.learning_rate.initial, betas=(cfg.beta1, 0.999))
@@ -75,10 +82,15 @@ class Pix2PixModel(BaseModel):
         pred_fake = self.netD(fake_AB)
         self.loss_G_GAN = self.criterionGAN(pred_fake, True)
         # Second, G(A) = B
-        self.loss_G_L1 = self.criterionL1(
-            self.fake_B, self.real_B) * self.cfg.lambda_L1
+        G_gt_losses = []
+        for loss_name, weight in self.cfg.loss.generator.ground_truth.items():
+            L = self.criteria_ground_truth[loss_name.lower()]
+            L = L(self.fake_B, self.real_B) * weight
+            setattr(self, f"loss_G_ground_truth_{loss_name.lower()}", L)
+            G_gt_losses.append(L)
+        self.loss_G_ground_truth = sum(G_gt_losses)
         # combine loss and calculate gradients
-        self.loss_G = self.loss_G_GAN + self.loss_G_L1
+        self.loss_G = self.loss_G_GAN + self.loss_G_ground_truth
         self.loss_G.backward()
 
     def optimize_parameters(self):

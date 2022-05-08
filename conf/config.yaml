@@ -34,13 +34,18 @@ learning_rate:
   n_epochs_decay: 10 # number of epochs to linearly decay learning rate to zero
   decay_iters: 50  # multiply by a gamma every decay_iters iterations                                                                                                                                                                          
 beta1: .5
-lambda_L1: 100.0 # weight for L1 loss
 discriminator:
   filters: 64
   layers: 3
 generator:
   filters: 64
   dropout: true
+loss:
+  generator:
+    ground_truth:
+      l1: 100.0
+      l2: 0.0
+      kl: 0.0
 verbose: true
 log_freq: 100 # log metrics every n iterations
 visualize_freq: 5000 # log visualizations every n iterations, must be a multiple of log_freq

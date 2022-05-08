@@ -7,8 +7,15 @@ from . import tensor2im
 
 class ModelLogger:
     def __init__(self, cfg: DictConfig):
-        wandb.init(project="hoechstgan", name=cfg.name,
-                   config=OmegaConf.to_container(cfg, resolve=True, throw_on_missing=True))
+        self.cfg = cfg
+
+    def __enter__(self):
+        wandb.init(project="hoechstgan", name=self.cfg.name,
+                   config=OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True))
+        return self
+
+    def __exit__(self, *args, **kwargs):
+        wandb.finish()
 
     def log(self, step, epoch, iters, losses, t_comp, t_data, visuals=None):
         log_dict = {"epoch": epoch, "iters": iters}
