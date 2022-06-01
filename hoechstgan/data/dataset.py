@@ -3,6 +3,8 @@ import json
 from PIL import Image
 from omegaconf import DictConfig
 
+from hoechstgan.data.split_dataset import get_dataset_splits
+
 from .transforms import get_transform
 from ..util.dataset import get_channel_file_from_metadata
 
@@ -11,11 +13,11 @@ class Dataset:
 
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
-        root = Path(self.cfg.dataset.data_root)  # / cfg.training.phase
-        self.json_paths = sorted(x for x in root.glob("*.json"))
+        self.root = Path(self.cfg.dataset.data_root)
+        self.json_paths = get_dataset_splits(cfg)[cfg.phase]
 
     def __getitem__(self, index):
-        json_path = self.json_paths[index]
+        json_path = self.root / self.json_paths[index]
 
         with json_path.open("r") as f:
             metadata = json.load(f)

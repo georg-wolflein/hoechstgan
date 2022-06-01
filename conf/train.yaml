@@ -3,3 +3,4 @@ defaults:
 - _self_
 
 is_train: true
+phase: train

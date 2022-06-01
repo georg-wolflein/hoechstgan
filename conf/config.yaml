@@ -5,6 +5,7 @@ defaults:
 
 name: experiment
 is_train: true
+phase: train
 initial_epoch: 0 # where to start counting epochs
 load_checkpoint: # (epoch | latest | null) if specified, will load checkpoint (if epoch, will use initial_epoch's checkpoint) and continue training from there
 data_folder: ${oc.env:DATA_FOLDER,/Users/georg/Desktop/Scratch.nosync}
@@ -23,6 +24,10 @@ dataset:
   shuffle: true
   num_threads: 4 # number of threads for loading data
   max_size: .inf
+  split:
+    train: 90
+    val: 0
+    test: 10
 norm: batch
 initialization: normal
 initialization_scale: .02 # scaling factor
