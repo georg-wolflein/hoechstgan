@@ -4,14 +4,31 @@ import numpy as np
 
 from . import tensor2im
 
+WANDB_ENTITY = "georgw7777"
+WANDB_PROJECT = "hoechstgan"
+
+
+def get_current_run_id(cfg: DictConfig) -> str:
+    if cfg.wandb_id:
+        return cfg.wandb_id
+    if wandb.run:
+        return wandb.run.id
+    return cfg.name
+
+
+def get_api() -> wandb.Api:
+    return wandb.Api(dict(entity=WANDB_ENTITY, project=WANDB_PROJECT))
+
 
 class ModelLogger:
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
 
     def __enter__(self):
-        wandb.init(project="hoechstgan", name=self.cfg.name,
+        wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
+                   name=self.cfg.name, id=self.cfg.wandb_id,
                    config=OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True))
+        self.cfg.wandb_id = wandb.run.id
         return self
 
     def __exit__(self, *args, **kwargs):

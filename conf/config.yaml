@@ -4,6 +4,7 @@ defaults:
   - dataset@dataset.output: cy3
 
 name: experiment
+wandb_id:
 is_train: true
 phase: train
 initial_epoch: 0 # where to start counting epochs
