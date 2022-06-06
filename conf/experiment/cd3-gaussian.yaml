@@ -2,7 +2,7 @@
 defaults:
   - override /dataset@dataset.output: cd3
 
-name: cd3-dist-transform
+name: cd3-gaussian
 dataset:
   output:
     transforms:
