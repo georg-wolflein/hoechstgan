@@ -10,15 +10,16 @@ from hoechstgan.util.logging import ModelLogger
 @hydra.main(config_path="conf", config_name="train")
 def train(cfg: DictConfig) -> None:
     assert cfg.visualize_freq % cfg.log_freq == 0
+
     dataset = create_dataset(cfg)
     dataset_size = len(dataset)
     print(f"Number of training images: {dataset_size}")
 
-    model = create_model(cfg)
-    model.setup(cfg)
-    step = cfg.initial_epoch * (dataset_size // cfg.dataset.batch_size)
-
     with ModelLogger(cfg) as model_logger:
+        model = create_model(cfg)
+        model.setup(cfg)
+        step = cfg.initial_epoch * (dataset_size // cfg.dataset.batch_size)
+
         # outer loop for different epochs
         for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
             epoch_start_time = time.time()  # timer for entire epoch

@@ -6,6 +6,8 @@ from abc import ABC, abstractmethod
 from omegaconf import DictConfig
 from pathlib import Path
 
+from hoechstgan.util.logging import get_current_run_id
+
 from . import networks
 
 
@@ -35,8 +37,9 @@ class BaseModel(ABC):
         self.device = torch.device(f"cuda:{self.gpus[0]}") \
             if self.gpus else torch.device('cpu')  # get device name: CPU or GPU
         # Save all the checkpoints to save_dir
-        self.save_dir = Path(cfg.checkpoints_dir) / cfg.name
+        self.save_dir = Path(cfg.checkpoints_dir) / get_current_run_id(cfg)
         self.save_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Checkpoints will be saved to {self.save_dir}")
         torch.backends.cudnn.benchmark = True
         self.loss_names = []
         self.model_names = []
