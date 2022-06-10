@@ -39,7 +39,7 @@ class BaseModel(ABC):
         # Save all the checkpoints to save_dir
         self.save_dir = Path(cfg.checkpoints_dir) / get_current_run_id(cfg)
         self.save_dir.mkdir(parents=True, exist_ok=True)
-        print(f"Checkpoints will be saved to {self.save_dir}")
+        print(f"Checkpoints directory: {self.save_dir}")
         torch.backends.cudnn.benchmark = True
         self.loss_names = []
         self.model_names = []

@@ -23,7 +23,8 @@ class CustomDatasetDataLoader():
     def __iter__(self):
         """Return a batch of data"""
         for i, data in enumerate(self.dataloader):
-            if i * self.cfg.dataset.batch_size >= self.cfg.dataset.max_size:
+            if str(self.cfg.dataset.max_size).lower() != "infinity" and \
+                    i * self.cfg.dataset.batch_size >= self.cfg.dataset.max_size:
                 break
             yield data
 
