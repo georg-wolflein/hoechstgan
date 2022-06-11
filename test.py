@@ -102,7 +102,8 @@ def test_model(cfg: DictConfig, metric: str = "fake MIR"):
             plt.text(0., y, k)
             plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
         plt.axis("off")
-    plt.savefig(Path(__file__).with_name(f"test_{cfg.name}.png"))
+    plt.savefig(Path(__file__).with_name(
+        f"test_{cfg.name}_{cfg.wandb_id}.png"))
 
 
 if __name__ == "__main__":

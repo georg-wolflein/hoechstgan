@@ -135,6 +135,7 @@ class BaseModel(ABC):
             if isinstance(name, str):
                 save_filename = f"{epoch}_net_{name}.pth"
                 save_path = self.save_dir / save_filename
+                print(f"Saving network: {save_path}")
                 net = getattr(self, "net" + name)
 
                 if len(self.gpus) > 0 and torch.cuda.is_available():
@@ -150,6 +151,7 @@ class BaseModel(ABC):
             if isinstance(name, str):
                 load_filename = f"{epoch}_net_{name}.pth"
                 load_path = self.save_dir / load_filename
+                print(f"Loading network: {load_path}")
                 net = getattr(self, "net" + name)
                 if isinstance(net, torch.nn.DataParallel):
                     net = net.module
