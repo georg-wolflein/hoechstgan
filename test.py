@@ -1,5 +1,5 @@
 
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -9,6 +9,7 @@ import itertools
 from functools import partial
 from skimage.morphology import label
 import argparse
+from hydra import initialize, compose
 
 from hoechstgan.data import create_dataset
 from hoechstgan.models import create_model
@@ -56,11 +57,16 @@ def perform_test(data, model):
         l_real = label(mask, connectivity=1)
         num_cells_real = l_real.max()
 
+        mir_real = compute_mask_intensity_ratio(get_img(real_B), mask)
+        mir_fake = compute_mask_intensity_ratio(get_img(fake_B), mask)
+        mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
+
         return {
             "metrics": {
                 "real cells": num_cells_real,
-                "real MIR": compute_mask_intensity_ratio(get_img(real_B), mask),
-                "fake MIR": compute_mask_intensity_ratio(get_img(fake_B), mask)
+                "real MIR": mir_real,
+                "fake MIR": mir_fake,
+                "MIR ratio": mir_ratio
             },
             "visuals": {
                 "real_A": get_img(real_A),
@@ -71,7 +77,7 @@ def perform_test(data, model):
         }
 
 
-def test_model(cfg: DictConfig, metric: str = "fake MIR"):
+def test_model(cfg: DictConfig, metric: str = "MIR ratio"):
     model = create_model(cfg)
     model.setup(cfg)
 
@@ -111,4 +117,7 @@ if __name__ == "__main__":
     parser.add_argument("run", type=str, help="wandb run ID")
     args = parser.parse_args()
     cfg = load_run_cfg(args.run)
+    initialize(config_path="conf", version_base="1.2")
+    test_cfg = compose("test_overrides.yaml")
+    cfg = OmegaConf.merge(cfg, test_cfg)
     test_model(cfg)

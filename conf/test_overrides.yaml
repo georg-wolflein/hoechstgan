@@ -1,9 +1,6 @@
-defaults:
-- config.yaml
-- _self_
-
 is_train: false
 phase: test
 load_checkpoint: latest
+gpus: []
 # dataset:
 #   shuffle: false

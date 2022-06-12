@@ -145,17 +145,17 @@ class BaseModel(ABC):
                     torch.save(net.cpu().state_dict(), save_path)
 
     def load_networks(self, epoch):
+        print(f"Loading network from epoch: {epoch}")
         if isinstance(epoch, int):
             epoch = f"{epoch:03d}"
         for name in self.model_names:
             if isinstance(name, str):
                 load_filename = f"{epoch}_net_{name}.pth"
                 load_path = self.save_dir / load_filename
-                print(f"Loading network: {load_path}")
                 net = getattr(self, "net" + name)
                 if isinstance(net, torch.nn.DataParallel):
                     net = net.module
-                print(f"loading the model from {load_path}")
+                print(f"Loading module from {load_path}")
                 state_dict = torch.load(load_path, map_location=self.device)
                 if hasattr(state_dict, "_metadata"):
                     del state_dict._metadata
