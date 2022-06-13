@@ -123,10 +123,16 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], num_decoders=1):
+    if num_decoders == 1:
+        G = UnetGenerator
+    elif num_decoders == 2:
+        G = DualUnetGenerator
+    else:
+        raise ValueError
     norm_layer = get_norm_layer(norm_type=norm)
-    net = UnetGenerator(input_nc, output_nc, 8, ngf,
-                        norm_layer=norm_layer, use_dropout=use_dropout)
+    net = G(input_nc, output_nc, 8, ngf,
+            norm_layer=norm_layer, use_dropout=use_dropout)
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -199,45 +205,6 @@ class GANLoss(nn.Module):
         return loss
 
 
-class UnetGenerator(nn.Module):
-    """Unet-based generator"""
-
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet generator
-        Parameters:
-            input_nc (int)  -- the number of channels in input images
-            output_nc (int) -- the number of channels in output images
-            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
-                                image of size 128x128 will become of size 1x1 # at the bottleneck
-            ngf (int)       -- the number of filters in the last conv layer
-            norm_layer      -- normalization layer
-
-        We construct the U-Net from the innermost layer to the outermost layer.
-        It is a recursive process.
-        """
-        super().__init__()
-        # construct unet structure
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer
-        # add intermediate layers with ngf * 8 filters
-        for i in range(num_downs - 5):
-            unet_block = UnetSkipConnectionBlock(
-                ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
-        # gradually reduce the number of filters from ngf * 8 to ngf
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(
-            ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        self.model = UnetSkipConnectionBlock(
-            output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
-
-    def forward(self, input):
-        """Standard forward"""
-        return self.model(input)
-
-
 class UnetSkipConnectionBlock(nn.Module):
     """Defines the Unet submodule with skip connection.
         X -------------------identity----------------------
@@ -306,6 +273,154 @@ class UnetSkipConnectionBlock(nn.Module):
             return self.model(x)
         else:   # add skip connections
             return torch.cat([x, self.model(x)], 1)
+
+
+class Take(nn.Module):
+    index: int
+    __constants__ = ["index"]
+
+    def __init__(self, module, index):
+        super().__init__()
+        self.module = module
+        self.index = index
+
+    def forward(self, x):
+        return self.module(x)[self.index]
+
+
+class DualUnetSkipConnectionBlock(nn.Module):
+    """Defines the Unet submodule with skip connection.
+        X -------------------identity----------------------
+        |-- downsampling -- |submodule| -- upsampling --|
+    """
+
+    def __init__(self, outer_nc, inner_nc, input_nc=None,
+                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        """Construct a Unet submodule with skip connections.
+
+        Parameters:
+            outer_nc (int) -- the number of filters in the outer conv layer
+            inner_nc (int) -- the number of filters in the inner conv layer
+            input_nc (int) -- the number of channels in input images/features
+            submodule (UnetSkipConnectionBlock) -- previously defined submodules
+            outermost (bool)    -- if this module is the outermost module
+            innermost (bool)    -- if this module is the innermost module
+            norm_layer          -- normalization layer
+            use_dropout (bool)  -- if use dropout layers.
+        """
+        super().__init__()
+        if submodule and not isinstance(submodule, DualUnetSkipConnectionBlock):
+            raise ValueError
+        self.outermost = outermost
+        if type(norm_layer) == functools.partial:
+            use_bias = norm_layer.func == nn.InstanceNorm2d
+        else:
+            use_bias = norm_layer == nn.InstanceNorm2d
+        if input_nc is None:
+            input_nc = outer_nc
+        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
+                             stride=2, padding=1, bias=use_bias)
+        downrelu = nn.LeakyReLU(0.2, True)
+        downnorm = norm_layer(inner_nc)
+        uprelu1 = nn.ReLU(True)
+        uprelu2 = nn.ReLU(True)
+        upnorm1 = norm_layer(outer_nc)
+        upnorm2 = norm_layer(outer_nc)
+
+        if outermost:
+            upconv1 = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1)
+            upconv2 = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1)
+            down = [downconv]
+            up1 = [uprelu1, upconv1, nn.Tanh()]
+            up2 = [uprelu2, upconv2, nn.Tanh()]
+            model1 = down + [Take(submodule, 0)] + up1
+            model2 = down + [Take(submodule, 1)] + up2
+        elif innermost:
+            upconv1 = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1, bias=use_bias)
+            upconv2 = nn.ConvTranspose2d(inner_nc, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1, bias=use_bias)
+            down = [downrelu, downconv]
+            up1 = [uprelu1, upconv1, upnorm1]
+            up2 = [uprelu2, upconv2, upnorm2]
+            model1 = down + up1
+            model2 = down + up2
+        else:
+            upconv1 = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1, bias=use_bias)
+            upconv2 = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
+                                         kernel_size=4, stride=2,
+                                         padding=1, bias=use_bias)
+            down = [downrelu, downconv, downnorm]
+            up1 = [uprelu1, upconv1, upnorm1]
+            up2 = [uprelu2, upconv2, upnorm2]
+
+            model1 = down + [Take(submodule, 0)] + up1
+            model2 = down + [Take(submodule, 1)] + up2
+            if use_dropout:
+                model1 = model1 + [nn.Dropout(0.5)]
+                model2 = model2 + [nn.Dropout(0.5)]
+
+        self.model1 = nn.Sequential(*model1)
+        self.model2 = nn.Sequential(*model2)
+
+    def forward(self, x):
+        if self.outermost:
+            return self.model1(x), self.model2(x)
+        else:   # add skip connections
+            return torch.cat([x, self.model1(x)], 1), torch.cat([x, self.model2(x)], 1)
+
+
+class UnetGenerator(nn.Module):
+    """Unet-based generator"""
+
+    SkipBlock = UnetSkipConnectionBlock
+
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        """Construct a Unet generator
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            output_nc (int) -- the number of channels in output images
+            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
+                                image of size 128x128 will become of size 1x1 # at the bottleneck
+            ngf (int)       -- the number of filters in the last conv layer
+            norm_layer      -- normalization layer
+
+        We construct the U-Net from the innermost layer to the outermost layer.
+        It is a recursive process.
+        """
+        super().__init__()
+        # construct unet structure
+        unet_block = self.SkipBlock(
+            ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer
+        # add intermediate layers with ngf * 8 filters
+        for i in range(num_downs - 5):
+            unet_block = self.SkipBlock(
+                ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
+        # gradually reduce the number of filters from ngf * 8 to ngf
+        unet_block = self.SkipBlock(
+            ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
+        unet_block = self.SkipBlock(
+            ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
+        unet_block = self.SkipBlock(
+            ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
+        self.model = self.SkipBlock(
+            output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+
+    def forward(self, input):
+        """Standard forward"""
+        return self.model(input)
+
+
+class DualUnetGenerator(UnetGenerator):
+    SkipBlock = DualUnetSkipConnectionBlock
 
 
 class NLayerDiscriminator(nn.Module):
