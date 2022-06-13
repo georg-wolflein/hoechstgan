@@ -1,4 +1,6 @@
 # @package _global_
 defaults:
+  - /dataset@dataset.outputs.C: cy5
   - override /dataset@dataset.outputs.B: cy3
-name: cy3
+name: hoechstgan
+gan: hoechstgan

@@ -1,9 +1,10 @@
 # @package _global_
 defaults:
-  - override /dataset@dataset.output: cd3
+  - override /dataset@dataset.outputs.B: cd3
 
-name: cd3-gaussian
+name: cd3-dist-transform
 dataset:
-  output:
-    transforms:
-    - gaussian_blur
+  outputs:
+    B:
+      transforms:
+      - gaussian_blur

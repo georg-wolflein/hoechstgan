@@ -3,5 +3,5 @@ defaults:
 - _self_
 
 props:
-  channel: H3342
+  channel: Cy5
   mode: raw

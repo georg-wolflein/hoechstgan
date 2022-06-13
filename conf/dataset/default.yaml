@@ -1,0 +1,3 @@
+props: # key-value pairs to identify images
+transforms: []
+num_channels: 1

@@ -29,16 +29,19 @@ class Dataset:
                 img = Image.open(path).convert("RGB")
                 return img
 
-            A = load_channel_img(self.cfg.dataset.input)
-            B = load_channel_img(self.cfg.dataset.output)
+            def load_and_transform_channel_img(ds_cfg):
+                img = load_channel_img(ds_cfg)
+                transform = get_transform(self.cfg, ds_cfg)
+                return transform(img)
 
-            A_transform = get_transform(self.cfg, self.cfg.dataset.input)
-            B_transform = get_transform(self.cfg, self.cfg.dataset.output)
+            assert "A" not in self.cfg.dataset.outputs
 
-            A = A_transform(A)
-            B = B_transform(B)
+            imgs = {k: load_and_transform_channel_img(v)
+                    for (k, v)
+                    in {"A": self.cfg.dataset.input,
+                        **self.cfg.dataset.outputs}.items()}
 
-            return {"A": A, "B": B, "json_files": str(json_path)}
+            return {**imgs, "json_files": str(json_path)}
 
     def __len__(self):
         return len(self.json_paths)

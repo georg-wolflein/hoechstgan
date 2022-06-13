@@ -1,7 +1,7 @@
 defaults:
   - _self_
   - dataset@dataset.input: h3342
-  - dataset@dataset.output: cy3
+  - dataset@dataset.outputs.B: default
 
 name: experiment
 wandb_id:
@@ -17,10 +17,15 @@ dataset:
     props: # key-value pairs to identify images
     transforms: []
     num_channels: 1
-  output:
-    props: # key-value pairs to identify images
-    transforms: []
-    num_channels: 1
+  outputs:
+    B:
+      props: # key-value pairs to identify images
+      transforms: []
+      num_channels: 1
+    # C:
+    #   props: # key-value pairs to identify images
+    #   transforms: []
+    #   num_channels: 1
   batch_size: 1
   shuffle: true
   num_threads: 4 # number of threads for loading data
@@ -40,6 +45,7 @@ learning_rate:
   n_epochs_decay: 10 # number of epochs to linearly decay learning rate to zero
   decay_iters: 50  # multiply by a gamma every decay_iters iterations                                                                                                                                                                          
 beta1: .5
+gan: pix2pix
 discriminator:
   filters: 64
   layers: 3

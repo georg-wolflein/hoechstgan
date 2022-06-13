@@ -1,3 +1,7 @@
+defaults:
+- default.yaml
+- _self_
+
 props:
   channel: CD3
   mode: mask
