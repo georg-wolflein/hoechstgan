@@ -20,6 +20,7 @@ RUN apt update && \
 
 # OpenGL is needed for OpenCV
 # RUN apt install -y libgl1-mesa-glx
+RUN apt install -y vim
 
 # Install poetry
 RUN pip install --upgrade pip setuptools && \
