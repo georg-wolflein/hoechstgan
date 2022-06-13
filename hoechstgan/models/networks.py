@@ -123,10 +123,15 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[]):
+def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], num_decoders=1):
     norm_layer = get_norm_layer(norm_type=norm)
-    net = UnetGeneratorDownUp(input_nc, output_nc, 8, ngf,
-                              norm_layer=norm_layer, use_dropout=use_dropout)
+
+    def make_net(factory):
+        return factory(input_nc, output_nc, 8, ngf,
+                       norm_layer=norm_layer, use_dropout=use_dropout)
+    encoder = make_net(UnetEncoder)
+    decoders = [make_net(UnetDecoder) for _ in range(num_decoders)]
+    net = UnetGenerator(encoder, *decoders)
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -199,169 +204,100 @@ class GANLoss(nn.Module):
         return loss
 
 
+def make_unet_layers(UnetBlock, input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout):
+    yield UnetBlock(output_nc, ngf, input_nc=input_nc, outermost=True,
+                    norm_layer=norm_layer)  # outermost layer
+    # gradually increase the number of filters from ngf to ngf * 8
+    yield UnetBlock(ngf, ngf * 2, input_nc=None,
+                    norm_layer=norm_layer)
+    yield UnetBlock(ngf * 2, ngf * 4, input_nc=None,
+                    norm_layer=norm_layer)
+    yield UnetBlock(ngf * 4, ngf * 8, input_nc=None,
+                    norm_layer=norm_layer)
+    # intermediate layers with ngf * 8 filters
+    for _ in range(num_downs - 5):
+        yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
+                        norm_layer=norm_layer, use_dropout=use_dropout)
+    yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
+                    norm_layer=norm_layer, innermost=True)  # innermost layer
+
+
+class UnetEncoder(nn.ModuleList):
+
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        """Construct a Unet generator encoder
+        Parameters:
+            input_nc (int)  -- the number of channels in input images
+            output_nc (int) -- the number of channels in output images
+            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
+                                image of size 128x128 will become of size 1x1 # at the bottleneck
+            ngf (int)       -- the number of filters in the last conv layer
+            norm_layer      -- normalization layer
+        """
+        super().__init__(list(make_unet_layers(UnetDown,
+                                               input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout)))
+
+    def forward(self, x):
+        intermediate_outputs = []
+        for layer in self:
+            x = layer(x)
+            intermediate_outputs.append(x)
+        return x, intermediate_outputs
+
+
+class UnetDecoder(nn.ModuleList):
+    """See UnetEncoder."""
+
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        super().__init__(reversed(list(make_unet_layers(UnetUp,
+                                                        input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout))))
+
+
+# class UnetGenerator(nn.Module):
+#     """Unet-based generator"""
+
+#     def __init__(self, encoder: UnetEncoder, decoder: UnetDecoder):
+#         super().__init__()
+#         self.encoder = encoder
+#         self.decoder = decoder
+
+#     def forward(self, x):
+#         x, xs = self.encoder(x)
+#         xs.pop()
+#         for up_layer in self.decoder.layers:
+#             x = up_layer(x)
+#             if len(xs) > 0:
+#                 x_prev = xs.pop()
+#                 x = torch.cat((x, x_prev), 1)
+#         return x
+
 class UnetGenerator(nn.Module):
     """Unet-based generator"""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet generator
-        Parameters:
-            input_nc (int)  -- the number of channels in input images
-            output_nc (int) -- the number of channels in output images
-            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
-                                image of size 128x128 will become of size 1x1 # at the bottleneck
-            ngf (int)       -- the number of filters in the last conv layer
-            norm_layer      -- normalization layer
-
-        We construct the U-Net from the innermost layer to the outermost layer.
-        It is a recursive process.
-        """
+    def __init__(self, encoder: UnetEncoder, *decoders: UnetDecoder):
         super().__init__()
-        # construct unet structure
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 8, ngf * 8, input_nc=None, submodule=None, norm_layer=norm_layer, innermost=True)  # add the innermost layer
-        # add intermediate layers with ngf * 8 filters
-        for i in range(num_downs - 5):
-            unet_block = UnetSkipConnectionBlock(
-                ngf * 8, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer, use_dropout=use_dropout)
-        # gradually reduce the number of filters from ngf * 8 to ngf
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 4, ngf * 8, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(
-            ngf * 2, ngf * 4, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        unet_block = UnetSkipConnectionBlock(
-            ngf, ngf * 2, input_nc=None, submodule=unet_block, norm_layer=norm_layer)
-        self.model = UnetSkipConnectionBlock(
-            output_nc, ngf, input_nc=input_nc, submodule=unet_block, outermost=True, norm_layer=norm_layer)  # add the outermost layer
+        self.encoder = encoder
+        self.decoders = nn.ModuleList(decoders)
 
-    def forward(self, input):
-        """Standard forward"""
-        return self.model(input)
-
-
-class UnetGeneratorDownUp(nn.Module):
-    """Unet-based generator"""
-
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet generator
-        Parameters:
-            input_nc (int)  -- the number of channels in input images
-            output_nc (int) -- the number of channels in output images
-            num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
-                                image of size 128x128 will become of size 1x1 # at the bottleneck
-            ngf (int)       -- the number of filters in the last conv layer
-            norm_layer      -- normalization layer
-
-        We construct the U-Net from the innermost layer to the outermost layer.
-        It is a recursive process.
-        """
-        super().__init__()
-
-        def make_layers(UnetBlock):
-            yield UnetBlock(output_nc, ngf, input_nc=input_nc, outermost=True,
-                            norm_layer=norm_layer)  # outermost layer
-            yield UnetBlock(ngf, ngf * 2, input_nc=None,
-                            norm_layer=norm_layer)
-            yield UnetBlock(ngf * 2, ngf * 4, input_nc=None,
-                            norm_layer=norm_layer)
-            yield UnetBlock(ngf * 4, ngf * 8, input_nc=None,
-                            norm_layer=norm_layer)
-            for _ in range(num_downs - 5):
-                yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
-                                norm_layer=norm_layer, use_dropout=use_dropout)
-            yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
-                            norm_layer=norm_layer, innermost=True)  # innermost layer
-        self.down_layers = nn.ModuleList(list(make_layers(UnetDown)))
-        self.up_layers = nn.ModuleList(reversed(list(make_layers(UnetUp))))
-
-    def forward(self, x):
-        """Standard forward"""
-        xs = []
-        for down_layer in self.down_layers:
-            x = down_layer(x)
-            xs.append(x)
-        xs.pop()
-        for up_layer in self.up_layers:
+    def _forward(self, x, xs, decoder):
+        xs = list(xs)
+        for up_layer in decoder:
             x = up_layer(x)
             if len(xs) > 0:
                 x_prev = xs.pop()
                 x = torch.cat((x, x_prev), 1)
         return x
 
-
-class UnetSkipConnectionBlock(nn.Module):
-    """Defines the Unet submodule with skip connection.
-        X -------------------identity----------------------
-        |-- downsampling -- |submodule| -- upsampling --|
-    """
-
-    def __init__(self, outer_nc, inner_nc, input_nc=None,
-                 submodule=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet submodule with skip connections.
-
-        Parameters:
-            outer_nc (int) -- the number of filters in the outer conv layer
-            inner_nc (int) -- the number of filters in the inner conv layer
-            input_nc (int) -- the number of channels in input images/features
-            submodule (UnetSkipConnectionBlock) -- previously defined submodules
-            outermost (bool)    -- if this module is the outermost module
-            innermost (bool)    -- if this module is the innermost module
-            norm_layer          -- normalization layer
-            use_dropout (bool)  -- if use dropout layers.
-        """
-        super(UnetSkipConnectionBlock, self).__init__()
-        self.outermost = outermost
-        if type(norm_layer) == functools.partial:
-            use_bias = norm_layer.func == nn.InstanceNorm2d
-        else:
-            use_bias = norm_layer == nn.InstanceNorm2d
-        if input_nc is None:
-            input_nc = outer_nc
-        downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
-                             stride=2, padding=1, bias=use_bias)
-        downrelu = nn.LeakyReLU(0.2, True)
-        downnorm = norm_layer(inner_nc)
-        uprelu = nn.ReLU(True)
-        upnorm = norm_layer(outer_nc)
-
-        if outermost:
-            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1)
-            down = [downconv]
-            up = [uprelu, upconv, nn.Tanh()]
-            model = down + [submodule] + up
-        elif innermost:
-            upconv = nn.ConvTranspose2d(inner_nc, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1, bias=use_bias)
-            down = [downrelu, downconv]
-            up = [uprelu, upconv, upnorm]
-            model = down + up
-        else:
-            upconv = nn.ConvTranspose2d(inner_nc * 2, outer_nc,
-                                        kernel_size=4, stride=2,
-                                        padding=1, bias=use_bias)
-            down = [downrelu, downconv, downnorm]
-            up = [uprelu, upconv, upnorm]
-
-            if use_dropout:
-                model = down + [submodule] + up + [nn.Dropout(0.5)]
-            else:
-                model = down + [submodule] + up
-
-        self.model = nn.Sequential(*model)
-
     def forward(self, x):
-        if self.outermost:
-            return self.model(x)
-        else:   # add skip connections
-            return torch.cat([x, self.model(x)], 1)
+        x, xs = self.encoder(x)
+        xs.pop()  # remove first intermediate output
+        return tuple(self._forward(x, xs, decoder) for decoder in self.decoders)
 
 
-class UnetDown(nn.Module):
+class UnetDown(nn.Sequential):
 
     def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet submodule with skip connections.
+        """Unet down block.
 
         Parameters:
             outer_nc (int) -- the number of filters in the outer conv layer
@@ -372,7 +308,6 @@ class UnetDown(nn.Module):
             norm_layer          -- normalization layer
             use_dropout (bool)  -- if use dropout layers.
         """
-        super().__init__()
         self.outermost = outermost
         if type(norm_layer) == functools.partial:
             use_bias = norm_layer.func == nn.InstanceNorm2d
@@ -392,20 +327,13 @@ class UnetDown(nn.Module):
         else:
             down = [downrelu, downconv, downnorm]
 
-        self.model = nn.Sequential(*down)
-
-    def forward(self, x):
-        return self.model(x)
+        super().__init__(*down)
 
 
-class UnetUp(nn.Module):
-    """Defines the Unet submodule with skip connection.
-        X -------------------identity----------------------
-        |-- downsampling -- |submodule| -- upsampling --|
-    """
+class UnetUp(nn.Sequential):
 
     def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
-        """Construct a Unet submodule with skip connections.
+        """Unet up block.
 
         Parameters:
             outer_nc (int) -- the number of filters in the outer conv layer
@@ -416,7 +344,6 @@ class UnetUp(nn.Module):
             norm_layer          -- normalization layer
             use_dropout (bool)  -- if use dropout layers.
         """
-        super().__init__()
         self.outermost = outermost
         if type(norm_layer) == functools.partial:
             use_bias = norm_layer.func == nn.InstanceNorm2d
@@ -446,10 +373,7 @@ class UnetUp(nn.Module):
             if use_dropout:
                 up = up + [nn.Dropout(0.5)]
 
-        self.model = nn.Sequential(*up)
-
-    def forward(self, x):
-        return self.model(x)
+        super().__init__(*up)
 
 
 class NLayerDiscriminator(nn.Module):
