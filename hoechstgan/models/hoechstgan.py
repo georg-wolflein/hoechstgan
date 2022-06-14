@@ -20,12 +20,13 @@ class HoechstGANModel(BaseModel):
     def __init__(self, cfg):
         BaseModel.__init__(self, cfg)
         self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
-        self.loss_names = list(itertools.chain(*[[f"G{i}_GAN", f"G{i}_ground_truth",
-                                                  *(f"G{i}_ground_truth_{x}" for x in self.generator_gt_losses),
-                                                  f"D{i}_real", f"D{i}_fake"]
-                                                 for i in ("", 0, 1)]))
+        self.loss_names = ["G", "D"] + \
+            list(itertools.chain(*[[f"G{i}_GAN", f"G{i}_ground_truth",
+                                    *(f"G{i}_ground_truth_{x}" for x in self.generator_gt_losses),
+                                    f"D{i}_real", f"D{i}_fake"]
+                                   for i in (1, 2)]))
         self.visual_names = [
-            "real_A", "fake_B", "real_B"]
+            "real_A", "fake_B", "real_B", "fake_C", "real_C"]
         if self.is_train:
             self.model_names = ['G', 'D1', 'D2']
         else:  # at test time, only load G
@@ -103,6 +104,7 @@ class HoechstGANModel(BaseModel):
         pred_fake_AC = self.netD2(fake_AC)
         self.loss_G1_GAN = self.criterionGAN(pred_fake_AB, True)
         self.loss_G2_GAN = self.criterionGAN(pred_fake_AC, True)
+
         # Second, G(A) = B
 
         def gt_losses(i):
@@ -177,5 +179,5 @@ class HoechstGANModel(BaseModel):
         self.set_requires_grad(self.netD1, False)
         self.set_requires_grad(self.netD2, False)
         self.optimizer_G.zero_grad()        # set G's gradients to zero
-        self.backward_G()                   # calculate graidents for G
+        self.backward_G()                   # calculate gradients for G
         self.optimizer_G.step()             # udpate G's weights

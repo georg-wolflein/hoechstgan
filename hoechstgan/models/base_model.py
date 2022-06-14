@@ -125,7 +125,10 @@ class BaseModel(ABC):
         for name in self.loss_names:
             if isinstance(name, str):
                 # float(...) works for both scalar tensor and float number
-                errors_ret[name] = float(getattr(self, 'loss_' + name))
+                try:
+                    errors_ret[name] = float(getattr(self, 'loss_' + name))
+                except AttributeError:
+                    pass
         return errors_ret
 
     def save_networks(self, epoch):

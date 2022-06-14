@@ -317,7 +317,7 @@ class UnetDown(nn.Sequential):
             input_nc = outer_nc
         downconv = nn.Conv2d(input_nc, inner_nc, kernel_size=4,
                              stride=2, padding=1, bias=use_bias)
-        downrelu = nn.LeakyReLU(0.2, True)
+        downrelu = nn.LeakyReLU(0.2)  # , True)
         downnorm = norm_layer(inner_nc)
 
         if outermost:
@@ -351,7 +351,7 @@ class UnetUp(nn.Sequential):
             use_bias = norm_layer == nn.InstanceNorm2d
         if input_nc is None:
             input_nc = outer_nc
-        uprelu = nn.ReLU(True)
+        uprelu = nn.ReLU()  # (True)
         upnorm = norm_layer(outer_nc)
 
         if outermost:

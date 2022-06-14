@@ -35,55 +35,71 @@ def get_img(tensor):
     return (tensor.cpu().numpy().squeeze() + 1) / 2.
 
 
-def perform_test(data, model):
+def perform_test(data, model, cfg):
     model.set_input(data)
     model.test()
 
-    for json_path, real_A, fake_B, real_B in zip(data["json_files"], model.real_A, model.fake_B, model.real_B):
-        json_path = Path(json_path)
+    outputs = cfg.dataset.outputs
+    real_outputs = {i: getattr(model, f"real_{i}") for i in outputs}
+    fake_outputs = {i: getattr(model, f"fake_{i}") for i in outputs}
+
+    for i, (json_path, real_A) in enumerate(zip(data["json_files"], model.real_A)):
+        metrics = {}
+        visuals = {"real_A": get_img(real_A)}
+        json_path = Path(data["json_files"][0])
         with json_path.open("r") as f:
             meta = json.load(f)
 
-        def get_mask(mask_type: str):
-            mask_path = json_path.with_name(get_channel_file_from_metadata(
-                meta, "CD3", "mask", mask_type=mask_type))
-            mask = Image.open(mask_path).convert("L")
-            mask = np.array(mask)
-            mask = mask != 0
-            return mask
+        for out, out_cfg in outputs.items():
+            real_X = real_outputs[out][i]
+            fake_X = fake_outputs[out][i]
+            channel = {
+                "Cy3": "CD3",
+                "Cy5": "CD8"
+            }[out_cfg.props.channel]
 
-        mask = get_mask("cells")
+            def get_mask():
+                mask_path = json_path.with_name(get_channel_file_from_metadata(
+                    meta, channel=channel, mode="mask", mask_type="cells"))
+                mask = Image.open(mask_path).convert("L")
+                mask = np.array(mask)
+                mask = mask != 0
+                return mask
 
-        l_real = label(mask, connectivity=1)
-        num_cells_real = l_real.max()
+            mask = get_mask()
 
-        mir_real = compute_mask_intensity_ratio(get_img(real_B), mask)
-        mir_fake = compute_mask_intensity_ratio(get_img(fake_B), mask)
-        mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
+            l_real = label(mask, connectivity=1)
+            num_cells_real = l_real.max()
 
-        return {
-            "metrics": {
-                "real cells": num_cells_real,
-                "real MIR": mir_real,
-                "fake MIR": mir_fake,
-                "MIR ratio": mir_ratio
-            },
-            "visuals": {
-                "real_A": get_img(real_A),
-                "fake_B": get_img(fake_B),
-                "real_B": get_img(real_B),
-                "mask": mask.astype(float)
-            }
+            mir_real = compute_mask_intensity_ratio(get_img(real_X), mask)
+            mir_fake = compute_mask_intensity_ratio(get_img(fake_X), mask)
+            mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
+
+            metrics.update({
+                f"{channel}+ cells": num_cells_real,
+                f"{channel} real MIR": mir_real,
+                f"{channel} fake MIR": mir_fake,
+                f"{channel} relative MIR": mir_ratio
+            })
+            visuals.update({
+                f"fake_{out}": get_img(fake_X),
+                f"real_{out}": get_img(real_X),
+                f"mask_{out}": mask.astype(float)
+            })
+
+        yield {
+            "metrics": metrics,
+            "visuals": visuals
         }
 
 
-def test_model(cfg: DictConfig, metric: str = "MIR ratio"):
+def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     model = create_model(cfg)
     model.setup(cfg)
 
     dataset = create_dataset(cfg)
-    res = itertools.islice(
-        map(partial(perform_test, model=model), dataset), 30)
+    res = itertools.chain(*[perform_test(data, model=model, cfg=cfg)
+                          for data in itertools.islice(dataset, 30)])
 
     if metric is not None:
         res = reversed(sorted(res, key=lambda x: x["metrics"][metric]))
@@ -92,7 +108,7 @@ def test_model(cfg: DictConfig, metric: str = "MIR ratio"):
     def subplot(rows, cols, row, col):
         return plt.subplot(rows, cols, cols * row + col + 1)
 
-    plt.figure(figsize=(12, len(res) * 2.1))
+    plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 3, len(res) * 2.2))
     plt.suptitle(f"Experiment: {cfg.name}")
     for row, r in enumerate(res):
         visuals = r["visuals"]
@@ -104,7 +120,7 @@ def test_model(cfg: DictConfig, metric: str = "MIR ratio"):
             plt.title(name)
             plt.axis("off")
         splot(row, col + 1)
-        for y, (k, v) in zip(np.linspace(.3, .7, len(metrics)), reversed(metrics.items())):
+        for y, (k, v) in zip(np.linspace(.1, .9, len(metrics)), reversed(metrics.items())):
             plt.text(0., y, k)
             plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
         plt.axis("off")
