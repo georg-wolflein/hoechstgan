@@ -1,6 +1,7 @@
 is_train: false
 phase: test
 load_checkpoint: latest
-gpus: []
-# dataset:
-#   shuffle: false
+# gpus: []
+dataset:
+  batch_size: 128
+  shuffle: true

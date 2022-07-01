@@ -10,6 +10,8 @@ from functools import partial
 from skimage.morphology import label
 import argparse
 from hydra import initialize, compose
+from tqdm import tqdm
+import pandas as pd
 
 from hoechstgan.data import create_dataset
 from hoechstgan.models import create_model
@@ -46,33 +48,30 @@ def perform_test(data, model, cfg):
     for i, (json_path, real_A) in enumerate(zip(data["json_files"], model.real_A)):
         metrics = {}
         visuals = {"real_A": get_img(real_A)}
-        json_path = Path(data["json_files"][0])
+        json_path = Path(json_path)
         with json_path.open("r") as f:
             meta = json.load(f)
 
         for out, out_cfg in outputs.items():
-            real_X = real_outputs[out][i]
-            fake_X = fake_outputs[out][i]
+            real_X = get_img(real_outputs[out][i])
+            fake_X = get_img(fake_outputs[out][i])
             channel = {
                 "Cy3": "CD3",
                 "Cy5": "CD8"
             }[out_cfg.props.channel]
 
-            def get_mask():
-                mask_path = json_path.with_name(get_channel_file_from_metadata(
-                    meta, channel=channel, mode="mask", mask_type="cells"))
-                mask = Image.open(mask_path).convert("L")
-                mask = np.array(mask)
-                mask = mask != 0
-                return mask
-
-            mask = get_mask()
+            # Get mask
+            mask_path = json_path.with_name(get_channel_file_from_metadata(
+                meta, channel=channel, mode="mask", mask_type="cells"))
+            mask = Image.open(mask_path).convert("L")
+            mask = np.array(mask)
+            mask = mask != 0
 
             l_real = label(mask, connectivity=1)
             num_cells_real = l_real.max()
 
-            mir_real = compute_mask_intensity_ratio(get_img(real_X), mask)
-            mir_fake = compute_mask_intensity_ratio(get_img(fake_X), mask)
+            mir_real = compute_mask_intensity_ratio(real_X, mask)
+            mir_fake = compute_mask_intensity_ratio(fake_X, mask)
             mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
 
             metrics.update({
@@ -82,8 +81,8 @@ def perform_test(data, model, cfg):
                 f"{channel} relative MIR": mir_ratio
             })
             visuals.update({
-                f"fake_{out}": get_img(fake_X),
-                f"real_{out}": get_img(real_X),
+                f"fake_{out}": fake_X,
+                f"real_{out}": real_X,
                 f"mask_{out}": mask.astype(float)
             })
 
@@ -98,8 +97,9 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     model.setup(cfg)
 
     dataset = create_dataset(cfg)
-    res = itertools.chain(*[perform_test(data, model=model, cfg=cfg)
-                          for data in itertools.islice(dataset, 30)])
+    res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg)
+                                                  for data in dataset)
+    res = itertools.islice(res_generator, 30)
 
     if metric is not None:
         res = reversed(sorted(res, key=lambda x: x["metrics"][metric]))
@@ -126,6 +126,13 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
         plt.axis("off")
     plt.savefig(Path(__file__).with_name(
         f"test_{cfg.name}_{cfg.wandb_id}.png"))
+
+    metrics = [r["metrics"]
+               for r in tqdm(itertools.chain(res, res_generator), total=len(dataset))]
+    df = pd.DataFrame(metrics)
+    df = df.replace([np.inf, -np.inf], np.nan)
+    print(df.describe())
+    df.to_csv(f"test_{cfg.name}_{cfg.wandb_id}.csv", index=False)
 
 
 if __name__ == "__main__":
