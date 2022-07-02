@@ -17,7 +17,7 @@ class Pix2PixModel(BaseModel):
     """
 
     def __init__(self, cfg):
-        BaseModel.__init__(self, cfg)
+        super().__init__(cfg)
         self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
         self.loss_names = ["G_GAN", "G_ground_truth",
                            *(f"G_ground_truth_{x}" for x in self.generator_gt_losses),

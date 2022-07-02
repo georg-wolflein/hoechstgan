@@ -123,15 +123,31 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], num_decoders=1):
+def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], num_decoders=1, learn_C_from_B=False):
     norm_layer = get_norm_layer(norm_type=norm)
 
-    def make_net(factory):
-        return factory(input_nc, output_nc, 8, ngf,
-                       norm_layer=norm_layer, use_dropout=use_dropout)
-    encoder = make_net(UnetEncoder)
-    decoders = [make_net(UnetDecoder) for _ in range(num_decoders)]
-    net = UnetGenerator(encoder, *decoders)
+    def make_net(factory, **kwargs):
+        defaults = dict(input_nc=input_nc, output_nc=output_nc, num_downs=8, ngf=ngf,
+                        norm_layer=norm_layer, use_dropout=use_dropout)
+        defaults.update(**kwargs)
+        return factory(**defaults)
+
+    if not learn_C_from_B:
+        encoders = {"A": make_net(UnetEncoder)}
+        decoders = {chr(ord("B") + i): make_net(UnetDecoder)
+                    for i in range(num_decoders)}
+    else:
+        assert num_decoders == 2
+        encoders = {
+            "A": make_net(UnetEncoder),
+            "B": make_net(UnetEncoder)
+        }
+        decoders = {
+            "B": make_net(UnetDecoder),
+            "C": make_net(UnetDecoder, ngf=ngf*2)
+        }
+
+    net = UnetGenerator(encoders, decoders)
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -242,7 +258,7 @@ class UnetEncoder(nn.ModuleList):
         for layer in self:
             x = layer(x)
             intermediate_outputs.append(x)
-        return x, intermediate_outputs
+        return intermediate_outputs  # last intermediate output is result
 
 
 class UnetDecoder(nn.ModuleList):
@@ -274,24 +290,40 @@ class UnetDecoder(nn.ModuleList):
 class UnetGenerator(nn.Module):
     """Unet-based generator"""
 
-    def __init__(self, encoder: UnetEncoder, *decoders: UnetDecoder):
+    def __init__(self, encoders: dict, decoders: dict):
         super().__init__()
-        self.encoder = encoder
-        self.decoders = nn.ModuleList(decoders)
+        assert "A" in encoders
+        assert {"B", "C"}.issubset(decoders.keys())
+        self.encoders = nn.ModuleDict(encoders)
+        self.decoders = nn.ModuleDict(decoders)
 
-    def _forward(self, x, xs, decoder):
-        xs = list(xs)
+    def _decode(self, outputs, decoder):
+        *xs, x = outputs  # outputs is list of intermediate outputs, where last one is the latent code
         for up_layer in decoder:
             x = up_layer(x)
             if len(xs) > 0:
-                x_prev = xs.pop()
+                *xs, x_prev = xs
                 x = torch.cat((x, x_prev), 1)
         return x
 
-    def forward(self, x):
-        x, xs = self.encoder(x)
-        xs.pop()  # remove first intermediate output
-        return tuple(self._forward(x, xs, decoder) for decoder in self.decoders)
+    def forward(self, real_A):
+        # Obtain latent code for A (including intermediate U-Net outputs)
+        latent_A = self.encoders["A"](real_A)
+        # If we have no B encoder, it's the basic scenario
+        if "B" not in self.encoders:
+            return tuple(self._decode(latent_A, decoder) for (_, decoder) in sorted(self.decoders.items()))
+        # Generate fake B
+        fake_B = self._decode(latent_A, self.decoders["B"])
+        # Obtain latent code for fake B
+        # TODO: what if we use real B here instead?
+        latent_B = self.encoders["B"](fake_B)
+        latent_B = list(map(torch.zeros_like, latent_B))  # test
+        # Merge latent codes
+        latent_AB = [torch.cat((a, b), axis=1)
+                     for (a, b) in zip(latent_A, latent_B)]
+        # Generate fake C from latent codes of A and B
+        fake_C = self._decode(latent_AB, self.decoders["C"])
+        return fake_B, fake_C
 
 
 class UnetDown(nn.Sequential):

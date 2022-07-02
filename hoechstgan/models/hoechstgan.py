@@ -18,7 +18,7 @@ class HoechstGANModel(BaseModel):
     """
 
     def __init__(self, cfg):
-        BaseModel.__init__(self, cfg)
+        super().__init__(cfg)
         self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
         self.loss_names = ["G", "D"] + \
             list(itertools.chain(*[[f"G{i}_GAN", f"G{i}_ground_truth",
@@ -33,7 +33,8 @@ class HoechstGANModel(BaseModel):
             self.model_names = ['G']
         # define networks (both generator and discriminator)
         self.netG = networks.define_G(cfg.dataset.input.num_channels, cfg.dataset.outputs.B.num_channels, cfg.generator.filters,
-                                      cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus, num_decoders=2)
+                                      cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus,
+                                      num_decoders=2, learn_C_from_B=cfg.generator.learn_C_from_B)
 
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD1 = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,
@@ -71,6 +72,7 @@ class HoechstGANModel(BaseModel):
     def forward(self):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
         self.fake_B, self.fake_C = self.netG(self.real_A)  # G(A)
+        # print(list(map(torch.Tensor.size, (self.real_A, self.fake_B, self.fake_C))))
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""

@@ -4,3 +4,5 @@ defaults:
   - override /dataset@dataset.outputs.B: cy3
 name: hoechstgan
 gan: hoechstgan
+generator:
+  learn_C_from_B: true

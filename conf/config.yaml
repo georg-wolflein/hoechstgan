@@ -52,6 +52,7 @@ discriminator:
 generator:
   filters: 64
   dropout: true
+  learn_C_from_B: false
 loss:
   generator:
     ground_truth:
