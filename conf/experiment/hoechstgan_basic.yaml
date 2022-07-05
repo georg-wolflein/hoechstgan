@@ -2,7 +2,7 @@
 defaults:
   - /dataset@dataset.outputs.C: cy5
   - override /dataset@dataset.outputs.B: cy3
-name: hoechstgan
+name: hoechstgan_basic
 gan: hoechstgan
 generator:
   filters: 64
@@ -11,11 +11,8 @@ generator:
   encoders:
     - from: real_A
       to: latent_A
-    - from: fake_B
-      to: latent_B
   decoders:
     - from: latent_A
       to: fake_B
-    - from: [latent_A, latent_B]
+    - from: latent_A
       to: fake_C
-      filters: 128

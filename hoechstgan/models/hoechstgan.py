@@ -1,4 +1,5 @@
 import itertools
+from omegaconf import OmegaConf
 import torch
 from .base_model import BaseModel
 from . import networks
@@ -34,7 +35,11 @@ class HoechstGANModel(BaseModel):
         # define networks (both generator and discriminator)
         self.netG = networks.define_G(cfg.dataset.input.num_channels, cfg.dataset.outputs.B.num_channels, cfg.generator.filters,
                                       cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus,
-                                      num_decoders=2, learn_C_from_B=cfg.generator.learn_C_from_B)
+                                      encoders=OmegaConf.to_container(
+                                          cfg.generator.encoders),
+                                      decoders=OmegaConf.to_container(
+                                          cfg.generator.decoders),
+                                      outputs=OmegaConf.to_container(cfg.generator.outputs))
 
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD1 = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,

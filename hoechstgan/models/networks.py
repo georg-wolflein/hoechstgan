@@ -123,31 +123,37 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, ngf, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], num_decoders=1, learn_C_from_B=False):
+def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: dict = {}, decoders: dict = {}, outputs: list = []):
     norm_layer = get_norm_layer(norm_type=norm)
 
     def make_net(factory, **kwargs):
-        defaults = dict(input_nc=input_nc, output_nc=output_nc, num_downs=8, ngf=ngf,
+        defaults = dict(input_nc=input_nc, output_nc=output_nc, num_downs=8, filters=filters,
                         norm_layer=norm_layer, use_dropout=use_dropout)
         defaults.update(**kwargs)
         return factory(**defaults)
 
-    if not learn_C_from_B:
-        encoders = {"A": make_net(UnetEncoder)}
-        decoders = {chr(ord("B") + i): make_net(UnetDecoder)
-                    for i in range(num_decoders)}
-    else:
-        assert num_decoders == 2
-        encoders = {
-            "A": make_net(UnetEncoder),
-            "B": make_net(UnetEncoder)
-        }
-        decoders = {
-            "B": make_net(UnetDecoder),
-            "C": make_net(UnetDecoder, ngf=ngf*2)
-        }
+    def except_keys(d: dict, *keys):
+        return {k: v for (k, v) in d.items() if k not in keys}
 
-    net = UnetGenerator(encoders, decoders)
+    def force_tuple(x):
+        if isinstance(x, tuple):
+            return x
+        elif isinstance(x, list):
+            return tuple(x)
+        else:
+            return x,
+
+    RESERVED_KEYS = ("from", "to")
+
+    encoders = {
+        (enc["from"], enc["to"]): make_net(UnetEncoder, **except_keys(enc, *RESERVED_KEYS)) for enc in encoders
+    }
+    decoders = {
+        (force_tuple(dec["from"]), dec["to"]): make_net(UnetDecoder, **except_keys(dec, *RESERVED_KEYS)) for dec in decoders
+    }
+
+    net = UnetGenerator(encoders, decoders, outputs)
+    net.describe()
     return init_net(net, init_type, init_gain, gpu_ids)
 
 
@@ -240,18 +246,18 @@ def make_unet_layers(UnetBlock, input_nc, output_nc, num_downs, ngf, norm_layer,
 
 class UnetEncoder(nn.ModuleList):
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
         """Construct a Unet generator encoder
         Parameters:
             input_nc (int)  -- the number of channels in input images
             output_nc (int) -- the number of channels in output images
             num_downs (int) -- the number of downsamplings in UNet. For example, # if |num_downs| == 7,
                                 image of size 128x128 will become of size 1x1 # at the bottleneck
-            ngf (int)       -- the number of filters in the last conv layer
+            filters (int)       -- the number of filters in the last conv layer
             norm_layer      -- normalization layer
         """
         super().__init__(list(make_unet_layers(UnetDown,
-                                               input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout)))
+                                               input_nc, output_nc, num_downs, filters, norm_layer, use_dropout)))
 
     def forward(self, x):
         intermediate_outputs = []
@@ -264,9 +270,9 @@ class UnetEncoder(nn.ModuleList):
 class UnetDecoder(nn.ModuleList):
     """See UnetEncoder."""
 
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
         super().__init__(reversed(list(make_unet_layers(UnetUp,
-                                                        input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout))))
+                                                        input_nc, output_nc, num_downs, filters, norm_layer, use_dropout))))
 
 
 # class UnetGenerator(nn.Module):
@@ -290,14 +296,39 @@ class UnetDecoder(nn.ModuleList):
 class UnetGenerator(nn.Module):
     """Unet-based generator"""
 
-    def __init__(self, encoders: dict, decoders: dict):
+    def __init__(self, encoders: dict, decoders: dict, outputs: list):
         super().__init__()
-        assert "A" in encoders
-        assert {"B", "C"}.issubset(decoders.keys())
-        self.encoders = nn.ModuleDict(encoders)
-        self.decoders = nn.ModuleDict(decoders)
 
-    def _decode(self, outputs, decoder):
+        self.encoders = nn.ModuleDict({self._pair2str(*k): v
+                                       for (k, v) in encoders.items()})
+        self.decoders = nn.ModuleDict({self._pair2str(*k): v
+                                       for (k, v) in decoders.items()})
+        self.outputs = outputs  # names of outputs
+
+    @classmethod
+    def _tostr(cls, x) -> str:
+        if isinstance(x, (tuple, list)):
+            return f"({','.join(x)})"
+        return x
+
+    @classmethod
+    def _fromstr(cls, x: str):
+        if x.startswith("(") and x.endswith(")"):
+            return tuple(x[1:-1].split(","))
+        return x
+
+    @classmethod
+    def _pair2str(cls, x_from, x_to) -> str:
+        return f"{cls._tostr(x_from)}->{cls._tostr(x_to)}"
+
+    @classmethod
+    def _str2pair(cls, x: str):
+        return tuple(map(cls._fromstr, x.split("->")))
+
+    def _decode(self, decoder, *latents):
+        # Merge latents layer-wise
+        outputs = [torch.cat(layer_outputs, axis=1)
+                   for layer_outputs in zip(*latents)]
         *xs, x = outputs  # outputs is list of intermediate outputs, where last one is the latent code
         for up_layer in decoder:
             x = up_layer(x)
@@ -306,24 +337,42 @@ class UnetGenerator(nn.Module):
                 x = torch.cat((x, x_prev), 1)
         return x
 
-    def forward(self, real_A):
-        # Obtain latent code for A (including intermediate U-Net outputs)
-        latent_A = self.encoders["A"](real_A)
-        # If we have no B encoder, it's the basic scenario
-        if "B" not in self.encoders:
-            return tuple(self._decode(latent_A, decoder) for (_, decoder) in sorted(self.decoders.items()))
-        # Generate fake B
-        fake_B = self._decode(latent_A, self.decoders["B"])
-        # Obtain latent code for fake B
-        # TODO: what if we use real B here instead?
-        latent_B = self.encoders["B"](fake_B)
-        latent_B = list(map(torch.zeros_like, latent_B))  # test
-        # Merge latent codes
-        latent_AB = [torch.cat((a, b), axis=1)
-                     for (a, b) in zip(latent_A, latent_B)]
-        # Generate fake C from latent codes of A and B
-        fake_C = self._decode(latent_AB, self.decoders["C"])
-        return fake_B, fake_C
+    def forward(self, real_A, dry_run: bool = False):
+        if dry_run:
+            print("Dry run of generator:")
+        outputs = {
+            "real_A": real_A
+        }
+        latents = {}
+        progress = True
+        while progress:
+            progress = False
+            for e, encoder in self.encoders.items():
+                enc_from, enc_to = self._str2pair(e)
+                if enc_to not in latents and enc_from in outputs:
+                    if dry_run:
+                        latent = None
+                        print(f"  Encoding {enc_from} -> {enc_to}")
+                    else:
+                        latent = encoder(outputs[enc_from])
+                    latents[enc_to] = latent
+                    progress = True
+            for d, decoder in self.decoders.items():
+                dec_from, dec_to = self._str2pair(d)
+                if dec_to not in outputs and all(map(latents.keys().__contains__, dec_from)):
+                    if dry_run:
+                        output = None
+                        print(f"  Decoding {','.join(dec_from)} -> {dec_to}")
+                    else:
+                        output = self._decode(
+                            decoder, *map(latents.__getitem__, dec_from))
+                    outputs[dec_to] = output
+                    progress = True
+        if dry_run:
+            print(f"  Done, generated following outputs: {', '.join(outputs)}")
+        return tuple(outputs[k] for k in self.outputs)
+
+    describe = functools.partialmethod(forward, None, dry_run=True)
 
 
 class UnetDown(nn.Sequential):

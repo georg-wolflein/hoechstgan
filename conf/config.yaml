@@ -41,9 +41,9 @@ gpus: [0]
 learning_rate:
   initial: 0.0002
   policy: linear # learning rate policy: linear | step | plateau | cosine
-  n_epochs_initial: 20 # number of epochs with the initial learning rate 
+  n_epochs_initial: 20 # number of epochs with the initial learning rate
   n_epochs_decay: 10 # number of epochs to linearly decay learning rate to zero
-  decay_iters: 50  # multiply by a gamma every decay_iters iterations                                                                                                                                                                          
+  decay_iters: 50 # multiply by a gamma every decay_iters iterations
 beta1: .5
 gan: pix2pix
 discriminator:
@@ -52,7 +52,13 @@ discriminator:
 generator:
   filters: 64
   dropout: true
-  learn_C_from_B: false
+  outputs: [fake_B]
+  encoders:
+    - from: real_A
+      to: latent_A
+  decoders:
+    - from: real_A
+      to: fake_B
 loss:
   generator:
     ground_truth:
@@ -63,5 +69,5 @@ verbose: true
 log_freq: 100 # log metrics every n iterations
 visualize_freq: 5000 # log visualizations every n iterations, must be a multiple of log_freq
 save_epoch_freq: 1
-save_latest_freq: 5000 
+save_latest_freq: 5000
 save_by_iter: false # if false, save only the latest model
