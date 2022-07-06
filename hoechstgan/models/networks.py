@@ -4,6 +4,8 @@ from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
 
+from ..util.module import PairedSerializedModuleDict
+
 
 ###############################################################################
 # Helper Functions
@@ -299,31 +301,9 @@ class UnetGenerator(nn.Module):
     def __init__(self, encoders: dict, decoders: dict, outputs: list):
         super().__init__()
 
-        self.encoders = nn.ModuleDict({self._pair2str(*k): v
-                                       for (k, v) in encoders.items()})
-        self.decoders = nn.ModuleDict({self._pair2str(*k): v
-                                       for (k, v) in decoders.items()})
+        self.encoders = PairedSerializedModuleDict(encoders)
+        self.decoders = PairedSerializedModuleDict(decoders)
         self.outputs = outputs  # names of outputs
-
-    @classmethod
-    def _tostr(cls, x) -> str:
-        if isinstance(x, (tuple, list)):
-            return f"({','.join(x)})"
-        return x
-
-    @classmethod
-    def _fromstr(cls, x: str):
-        if x.startswith("(") and x.endswith(")"):
-            return tuple(x[1:-1].split(","))
-        return x
-
-    @classmethod
-    def _pair2str(cls, x_from, x_to) -> str:
-        return f"{cls._tostr(x_from)}->{cls._tostr(x_to)}"
-
-    @classmethod
-    def _str2pair(cls, x: str):
-        return tuple(map(cls._fromstr, x.split("->")))
 
     def _decode(self, decoder, *latents):
         # Merge latents layer-wise
@@ -347,8 +327,7 @@ class UnetGenerator(nn.Module):
         progress = True
         while progress:
             progress = False
-            for e, encoder in self.encoders.items():
-                enc_from, enc_to = self._str2pair(e)
+            for (enc_from, enc_to), encoder in self.encoders.items():
                 if enc_to not in latents and enc_from in outputs:
                     if dry_run:
                         latent = None
@@ -357,8 +336,7 @@ class UnetGenerator(nn.Module):
                         latent = encoder(outputs[enc_from])
                     latents[enc_to] = latent
                     progress = True
-            for d, decoder in self.decoders.items():
-                dec_from, dec_to = self._str2pair(d)
+            for (dec_from, dec_to), decoder in self.decoders.items():
                 if dec_to not in outputs and all(map(latents.keys().__contains__, dec_from)):
                     if dry_run:
                         output = None
