@@ -125,7 +125,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: dict = {}, decoders: dict = {}, outputs: list = []):
+def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: dict = {}, decoders: dict = {}, outputs: list = [], verbose: bool = True):
     norm_layer = get_norm_layer(norm_type=norm)
 
     def make_net(factory, **kwargs):
@@ -155,7 +155,8 @@ def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init
     }
 
     net = UnetGenerator(encoders, decoders, outputs)
-    net.describe()
+    if verbose:
+        net.describe()
     return init_net(net, init_type, init_gain, gpu_ids)
 
 

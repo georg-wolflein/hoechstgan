@@ -92,10 +92,29 @@ def perform_test(data, model, cfg):
         }
 
 
-def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
+def setup_model(cfg: DictConfig, is_train: bool = False, verbose: bool = True):
+    cfg.is_train = is_train
+    cfg.phase = "train" if is_train else "test"
+    cfg.verbose = verbose
     model = create_model(cfg)
     model.setup(cfg)
+    return model
 
+
+def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
+    model_stats = dict()
+
+    # Load model in train mode to gather some stats
+    model = setup_model(cfg, is_train=True, verbose=False)
+    model_stats.update({f"num_params_{k}": v
+                        for (k, v) in {
+                            **model.num_parameters_by_net(),
+                            "total": model.num_parameters
+                        }.items()})
+    del model
+
+    # Load model again in test mode
+    model = setup_model(cfg, is_train=False, verbose=True)
     dataset = create_dataset(cfg)
     res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg)
                                                   for data in dataset)
@@ -132,7 +151,11 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     df = pd.DataFrame(metrics)
     df = df.replace([np.inf, -np.inf], np.nan)
     print(df.describe())
-    df.to_csv(f"test_{cfg.name}_{cfg.wandb_id}.csv", index=False)
+    df.to_csv(f"test_{cfg.name}_{cfg.wandb_id}_metrics.csv", index=False)
+
+    model_stats.update({f"metric_mean_{k}": v for (k, v) in df.mean().items()})
+    df_stats = pd.DataFrame(model_stats.items(), columns=["key", "value"])
+    df_stats.to_csv(f"test_{cfg.name}_{cfg.wandb_id}_stats.csv", index=False)
 
 
 if __name__ == "__main__":

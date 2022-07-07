@@ -184,8 +184,19 @@ class BaseModel(ABC):
                       (name, num_params / 1e6))
         print('-----------------------------------------------')
 
+    def num_parameters_by_net(self) -> dict:
+        return {
+            name: sum(param.numel()
+                      for param in getattr(self, 'net' + name).parameters())
+            for name in self.model_names if isinstance(name, str)
+        }
+
+    @property
+    def num_parameters(self):
+        return sum(self.num_parameters_by_net().values())
+
     def set_requires_grad(self, nets, requires_grad=False):
-        """Set requies_grad=Fasle for all the networks to avoid unnecessary computations
+        """Set requires_grad=False for all the networks to avoid unnecessary computations
         Parameters:
             nets (network list)   -- a list of networks
             requires_grad (bool)  -- whether the networks require gradients or not

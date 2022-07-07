@@ -39,7 +39,9 @@ class HoechstGANModel(BaseModel):
                                           cfg.generator.encoders),
                                       decoders=OmegaConf.to_container(
                                           cfg.generator.decoders),
-                                      outputs=OmegaConf.to_container(cfg.generator.outputs))
+                                      outputs=OmegaConf.to_container(
+                                          cfg.generator.outputs),
+                                      verbose=cfg.verbose)
 
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD1 = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,
