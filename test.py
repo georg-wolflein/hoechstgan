@@ -12,6 +12,7 @@ import argparse
 from hydra import initialize, compose
 from tqdm import tqdm
 import pandas as pd
+import torch
 
 from hoechstgan.data import create_dataset
 from hoechstgan.models import create_model
@@ -37,7 +38,7 @@ def get_img(tensor):
     return (tensor.cpu().numpy().squeeze() + 1) / 2.
 
 
-def perform_test(data, model, cfg):
+def perform_test(data, model, cfg, latent_substitutions=None):
     model.set_input(data)
     model.test()
 
@@ -45,10 +46,15 @@ def perform_test(data, model, cfg):
     real_outputs = {i: getattr(model, f"real_{i}") for i in outputs}
     fake_outputs = {i: getattr(model, f"fake_{i}") for i in outputs}
 
+    if latent_substitutions:
+        model.test(latent_substitutions=latent_substitutions)
+        fake_outputs_sub = {i: getattr(model, f"fake_{i}")
+                            for i in outputs}
+
     for i, (json_path, real_A) in enumerate(zip(data["json_files"], model.real_A)):
-        metrics = {}
-        visuals = {"real_A": get_img(real_A)}
         json_path = Path(json_path)
+        metrics = {"file": json_path.stem}
+        visuals = {"real_A": get_img(real_A)}
         with json_path.open("r") as f:
             meta = json.load(f)
 
@@ -82,6 +88,7 @@ def perform_test(data, model, cfg):
             })
             visuals.update({
                 f"fake_{out}": fake_X,
+                **({f"fake_{out}_sub": get_img(fake_outputs_sub[out][i])} if latent_substitutions else {}),
                 f"real_{out}": real_X,
                 f"mask_{out}": mask.astype(float)
             })
@@ -92,10 +99,13 @@ def perform_test(data, model, cfg):
         }
 
 
-def setup_model(cfg: DictConfig, is_train: bool = False, verbose: bool = True):
+def setup_model(cfg: DictConfig, overrides: list = [], is_train: bool = False, verbose: bool = True, gpus: list = None):
+    cfg = cfg.copy()
     cfg.is_train = is_train
     cfg.phase = "train" if is_train else "test"
     cfg.verbose = verbose
+    if gpus is not None:
+        cfg.gpus = gpus
     model = create_model(cfg)
     model.setup(cfg)
     return model
@@ -105,7 +115,7 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     model_stats = dict()
 
     # Load model in train mode to gather some stats
-    model = setup_model(cfg, is_train=True, verbose=False)
+    model = setup_model(cfg, is_train=True, verbose=False, gpus=[])
     model_stats.update({f"num_params_{k}": v
                         for (k, v) in {
                             **model.num_parameters_by_net(),
@@ -113,10 +123,15 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
                         }.items()})
     del model
 
+    def substitute(latent):
+        return [torch.zeros_like(x) for x in latent]
+        return [torch.normal(0., 1., x.shape).to(model.device) for x in latent]
+    latent_substitutions = {"latent_B": substitute}
+
     # Load model again in test mode
     model = setup_model(cfg, is_train=False, verbose=True)
     dataset = create_dataset(cfg)
-    res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg)
+    res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
                                                   for data in dataset)
     res = itertools.islice(res_generator, 30)
 
@@ -127,12 +142,13 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     def subplot(rows, cols, row, col):
         return plt.subplot(rows, cols, cols * row + col + 1)
 
-    plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 3, len(res) * 2.2))
+    plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 6,
+                        (len(res) + 5) * 2.2))
     plt.suptitle(f"Experiment: {cfg.name}")
     for row, r in enumerate(res):
         visuals = r["visuals"]
         metrics = r["metrics"]
-        splot = partial(subplot, len(res), len(visuals) + 1)
+        splot = partial(subplot, len(res), len(visuals) + 5)
         for col, (name, visual) in enumerate(visuals.items()):
             splot(row, col)
             plt.imshow(visual, cmap="gray")

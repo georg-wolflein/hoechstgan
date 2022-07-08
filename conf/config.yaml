@@ -57,7 +57,7 @@ generator:
     - from: real_A
       to: latent_A
   decoders:
-    - from: real_A
+    - from: latent_A
       to: fake_B
 loss:
   generator:

@@ -5,8 +5,6 @@ defaults:
 name: hoechstgan
 gan: hoechstgan
 generator:
-  filters: 64
-  dropout: true
   outputs: [fake_B, fake_C]
   encoders:
     - from: real_A

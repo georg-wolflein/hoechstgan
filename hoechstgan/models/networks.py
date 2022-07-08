@@ -125,7 +125,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: dict = {}, decoders: dict = {}, outputs: list = [], verbose: bool = True):
+def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: list = [], decoders: list = [], outputs: list = [], verbose: bool = True):
     norm_layer = get_norm_layer(norm_type=norm)
 
     def make_net(factory, **kwargs):
@@ -307,8 +307,8 @@ class UnetGenerator(nn.Module):
         self.outputs = outputs  # names of outputs
 
     def _decode(self, decoder, *latents):
-        # Merge latents layer-wise
-        outputs = [torch.cat(layer_outputs, axis=1)
+        # Merge latents layer-wise (concatenate across channel dimension)
+        outputs = [torch.cat(layer_outputs, axis=-3)  # tensors are of shape BCWH
                    for layer_outputs in zip(*latents)]
         *xs, x = outputs  # outputs is list of intermediate outputs, where last one is the latent code
         for up_layer in decoder:
@@ -318,9 +318,11 @@ class UnetGenerator(nn.Module):
                 x = torch.cat((x, x_prev), 1)
         return x
 
-    def forward(self, real_A, dry_run: bool = False):
-        if dry_run:
-            print("Dry run of generator:")
+    def forward(self, real_A, /, dry_run: bool = False, verbose: bool = None, latent_substitutions: dict = {}):
+        if dry_run and verbose is None:
+            verbose = True
+        log = print if verbose else lambda _: None
+        log("Dry run of generator:")
         outputs = {
             "real_A": real_A
         }
@@ -330,25 +332,25 @@ class UnetGenerator(nn.Module):
             progress = False
             for (enc_from, enc_to), encoder in self.encoders.items():
                 if enc_to not in latents and enc_from in outputs:
-                    if dry_run:
-                        latent = None
-                        print(f"  Encoding {enc_from} -> {enc_to}")
-                    else:
+                    latent = None
+                    log(f"  Encoding {enc_from} -> {enc_to}")
+                    if not dry_run:
                         latent = encoder(outputs[enc_from])
+                        if enc_to in latent_substitutions:
+                            log(f"  Substituting latent code for {enc_to}")
+                            latent = latent_substitutions[enc_to](latent)
                     latents[enc_to] = latent
                     progress = True
             for (dec_from, dec_to), decoder in self.decoders.items():
                 if dec_to not in outputs and all(map(latents.keys().__contains__, dec_from)):
-                    if dry_run:
-                        output = None
-                        print(f"  Decoding {','.join(dec_from)} -> {dec_to}")
-                    else:
+                    output = None
+                    log(f"  Decoding {','.join(dec_from)} -> {dec_to}")
+                    if not dry_run:
                         output = self._decode(
                             decoder, *map(latents.__getitem__, dec_from))
                     outputs[dec_to] = output
                     progress = True
-        if dry_run:
-            print(f"  Done, generated following outputs: {', '.join(outputs)}")
+        log(f"  Done, generated following outputs: {', '.join(outputs)}")
         return tuple(outputs[k] for k in self.outputs)
 
     describe = functools.partialmethod(forward, None, dry_run=True)

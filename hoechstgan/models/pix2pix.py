@@ -1,3 +1,4 @@
+from omegaconf import OmegaConf
 import torch
 from .base_model import BaseModel
 from . import networks
@@ -29,8 +30,14 @@ class Pix2PixModel(BaseModel):
             self.model_names = ['G']
         # define networks (both generator and discriminator)
         self.netG = networks.define_G(cfg.dataset.input.num_channels, cfg.dataset.outputs.B.num_channels, cfg.generator.filters,
-                                      cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus, verbose=cfg.verbose)
-
+                                      cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus,
+                                      encoders=OmegaConf.to_container(
+                                          cfg.generator.encoders),
+                                      decoders=OmegaConf.to_container(
+                                          cfg.generator.decoders),
+                                      outputs=OmegaConf.to_container(
+                                          cfg.generator.outputs),
+                                      verbose=cfg.verbose)
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,
                                           cfg.norm, cfg.initialization, cfg.initialization_scale, cfg.gpus)
@@ -56,9 +63,9 @@ class Pix2PixModel(BaseModel):
         self.real_A = input["A"].to(self.device)
         self.real_B = input["B"].to(self.device)
 
-    def forward(self):
+    def forward(self, **kwargs):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B, = self.netG(self.real_A)  # G(A)
+        self.fake_B, = self.netG(self.real_A, **kwargs)  # G(A)
 
     def backward_D(self):
         """Calculate GAN loss for the discriminator"""

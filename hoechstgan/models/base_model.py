@@ -1,5 +1,7 @@
+import itertools
 import os
 import shutil
+import typing
 import torch
 from collections import OrderedDict
 from abc import ABC, abstractmethod
@@ -9,6 +11,14 @@ from pathlib import Path
 from hoechstgan.util.logging import get_current_run_id
 
 from . import networks
+
+
+def _count_params(params: typing.Iterable) -> int:
+    # Count number of parameters, counting shared parameters only once
+    return sum({param.data_ptr(): param.numel()
+                for param in params
+                if param.requires_grad  # filter only trainable
+                }.values())
 
 
 class BaseModel(ABC):
@@ -85,14 +95,14 @@ class BaseModel(ABC):
                 net = getattr(self, 'net' + name)
                 net.eval()
 
-    def test(self):
+    def test(self, **kwargs):
         """Forward function used in test time.
 
         This function wraps <forward> function in no_grad() so we don't save intermediate steps for backprop
         It also calls <compute_visuals> to produce additional visualization results
         """
         with torch.no_grad():
-            self.forward()
+            self.forward(**kwargs)
             self.compute_visuals()
 
     def compute_visuals(self):
@@ -174,10 +184,8 @@ class BaseModel(ABC):
         print('---------- Networks initialized -------------')
         for name in self.model_names:
             if isinstance(name, str):
-                net = getattr(self, 'net' + name)
-                num_params = 0
-                for param in net.parameters():
-                    num_params += param.numel()
+                net = getattr(self, "net" + name)
+                num_params = _count_params(net.parameters())
                 if verbose:
                     print(net)
                 print('[Network %s] Total number of parameters : %.3f M' %
@@ -186,14 +194,16 @@ class BaseModel(ABC):
 
     def num_parameters_by_net(self) -> dict:
         return {
-            name: sum(param.numel()
-                      for param in getattr(self, 'net' + name).parameters())
+            name: _count_params(getattr(self, "net" + name).parameters())
             for name in self.model_names if isinstance(name, str)
         }
 
     @property
     def num_parameters(self):
-        return sum(self.num_parameters_by_net().values())
+        # Ensure we don't count parameters multiple times
+        return _count_params(itertools.chain.from_iterable(getattr(self, "net" + name).parameters()
+                                                           for name in self.model_names
+                                                           if isinstance(name, str)))
 
     def set_requires_grad(self, nets, requires_grad=False):
         """Set requires_grad=False for all the networks to avoid unnecessary computations

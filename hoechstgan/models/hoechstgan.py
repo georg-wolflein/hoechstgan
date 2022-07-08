@@ -76,9 +76,9 @@ class HoechstGANModel(BaseModel):
         self.real_B = input["B"].to(self.device)
         self.real_C = input["C"].to(self.device)
 
-    def forward(self):
+    def forward(self, **kwargs):
         """Run forward pass; called by both functions <optimize_parameters> and <test>."""
-        self.fake_B, self.fake_C = self.netG(self.real_A)  # G(A)
+        self.fake_B, self.fake_C = self.netG(self.real_A, **kwargs)  # G(A)
         # print(list(map(torch.Tensor.size, (self.real_A, self.fake_B, self.fake_C))))
 
     def backward_D(self):
