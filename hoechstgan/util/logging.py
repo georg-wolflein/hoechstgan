@@ -1,6 +1,7 @@
 from omegaconf import DictConfig, OmegaConf
 import wandb
 import numpy as np
+import sys
 
 from . import tensor2im
 
@@ -25,9 +26,15 @@ class ModelLogger:
         self.cfg = cfg
 
     def __enter__(self):
+        cfg = {
+            **OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True),
+            "overrides": " ".join(x
+                                  for x in sys.argv[1:]
+                                  if not x.startswith("+experiment=") and not x.startswith("gpus="))
+        }
         wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
                    name=self.cfg.name, id=self.cfg.wandb_id,
-                   config=OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True))
+                   config=cfg)
         self.cfg.wandb_id = wandb.run.id
         return self
 

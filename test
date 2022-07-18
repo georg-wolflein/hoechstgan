@@ -1,0 +1,11 @@
+#!/bin/bash
+
+set -e
+
+RUNS="39a9nz4s 278yqnqo o527pi79"
+
+for sub in "" "--substitute"; do
+    for run in $RUNS; do
+        poetry run python test.py $run $sub
+    done
+done

@@ -13,11 +13,15 @@ from hydra import initialize, compose
 from tqdm import tqdm
 import pandas as pd
 import torch
+import wandb
 
 from hoechstgan.data import create_dataset
 from hoechstgan.models import create_model
 from hoechstgan.util.dataset import get_channel_file_from_metadata
 from hoechstgan.util.logging import WANDB_ENTITY, WANDB_PROJECT, get_api
+
+OUT_DIR = Path(__file__).parent / "vis"
+OUT_DIR.mkdir(exist_ok=True)
 
 
 def load_run_cfg(run_id: str) -> DictConfig:
@@ -25,7 +29,7 @@ def load_run_cfg(run_id: str) -> DictConfig:
     run = api.run(f"{WANDB_ENTITY}/{WANDB_PROJECT}/{run_id}")
     cfg = DictConfig(run.config)
     cfg.wandb_id = run_id
-    return cfg
+    return cfg, run
 
 
 def compute_mask_intensity_ratio(img, mask) -> float:
@@ -111,22 +115,33 @@ def setup_model(cfg: DictConfig, overrides: list = [], is_train: bool = False, v
     return model
 
 
-def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
-    model_stats = dict()
+def get_fig(fig: plt.Figure) -> wandb.Image:
+    img = wandb.Image(fig)
+    fig.gca().clear()
+    fig.clear()
+    return img
+
+
+def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 relative MIR", do_latent_substitution: bool = False):
+    summary_stats = dict()
+    update_wandb_stats = not do_latent_substitution  # only update stats if not sub
+    filename_suffix = "sub" if do_latent_substitution else ""
 
     # Load model in train mode to gather some stats
     model = setup_model(cfg, is_train=True, verbose=False, gpus=[])
-    model_stats.update({f"num_params_{k}": v
-                        for (k, v) in {
-                            **model.num_parameters_by_net(),
-                            "total": model.num_parameters
-                        }.items()})
+    summary_stats.update({f"num_params_{k}": v
+                          for (k, v) in {
+                              **model.num_parameters_by_net(),
+                              "total": model.num_parameters
+                          }.items()})
     del model
 
-    def substitute(latent):
-        return [torch.zeros_like(x) for x in latent]
-        return [torch.normal(0., 1., x.shape).to(model.device) for x in latent]
-    latent_substitutions = {"latent_B": substitute}
+    latent_substitutions = {}
+    if do_latent_substitution:
+        def substitute(latent):
+            return [torch.zeros_like(x) for x in latent]
+            return [torch.normal(0., 1., x.shape).to(model.device) for x in latent]
+        latent_substitutions = {"latent_B": substitute}
 
     # Load model again in test mode
     model = setup_model(cfg, is_train=False, verbose=True)
@@ -142,8 +157,8 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
     def subplot(rows, cols, row, col):
         return plt.subplot(rows, cols, cols * row + col + 1)
 
-    plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 6,
-                        (len(res) + 5) * 2.2))
+    fig = plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 6,
+                              (len(res) + 5) * 2.2))
     plt.suptitle(f"Experiment: {cfg.name}")
     for row, r in enumerate(res):
         visuals = r["visuals"]
@@ -159,27 +174,37 @@ def test_model(cfg: DictConfig, metric="CD8 relative MIR"):
             plt.text(0., y, k)
             plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
         plt.axis("off")
-    plt.savefig(Path(__file__).with_name(
-        f"test_{cfg.name}_{cfg.wandb_id}.png"))
+    plt.savefig(
+        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_vis.png")
+    # run.summary["sample_vis"] = get_fig(fig)
 
     metrics = [r["metrics"]
                for r in tqdm(itertools.chain(res, res_generator), total=len(dataset))]
     df = pd.DataFrame(metrics)
     df = df.replace([np.inf, -np.inf], np.nan)
     print(df.describe())
-    df.to_csv(f"test_{cfg.name}_{cfg.wandb_id}_metrics.csv", index=False)
+    df.to_csv(
+        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_metrics.csv", index=False)
 
-    model_stats.update({f"metric_mean_{k}": v for (k, v) in df.mean().items()})
-    df_stats = pd.DataFrame(model_stats.items(), columns=["key", "value"])
-    df_stats.to_csv(f"test_{cfg.name}_{cfg.wandb_id}_stats.csv", index=False)
+    summary_stats.update(
+        {f"mean {k}": v for (k, v) in df.mean().items()})
+    if update_wandb_stats:
+        run.summary.update(summary_stats)
+        run.update()
+    df_stats = pd.DataFrame(summary_stats.items(), columns=["key", "value"])
+    df_stats.to_csv(
+        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_stats.csv", index=False)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("run", type=str, help="wandb run ID")
+    parser.add_argument("--substitute",
+                        action="store_true",
+                        help="perform latent substition")
     args = parser.parse_args()
-    cfg = load_run_cfg(args.run)
+    cfg, run = load_run_cfg(args.run)
     initialize(config_path="conf", version_base="1.2")
     test_cfg = compose("test_overrides.yaml")
     cfg = OmegaConf.merge(cfg, test_cfg)
-    test_model(cfg)
+    test_model(cfg, run, do_latent_substitution=args.substitute)
