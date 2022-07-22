@@ -23,6 +23,11 @@ from hoechstgan.util.logging import WANDB_ENTITY, WANDB_PROJECT, get_api
 OUT_DIR = Path(__file__).parent / "vis"
 OUT_DIR.mkdir(exist_ok=True)
 
+CHANNELS = {
+    "Cy3": "CD3",
+    "Cy5": "CD8"
+}
+
 
 def load_run_cfg(run_id: str) -> DictConfig:
     api = get_api()
@@ -65,10 +70,7 @@ def perform_test(data, model, cfg, latent_substitutions=None):
         for out, out_cfg in outputs.items():
             real_X = get_img(real_outputs[out][i])
             fake_X = get_img(fake_outputs[out][i])
-            channel = {
-                "Cy3": "CD3",
-                "Cy5": "CD8"
-            }[out_cfg.props.channel]
+            channel = CHANNELS[out_cfg.props.channel]
 
             # Get mask
             mask_path = json_path.with_name(get_channel_file_from_metadata(
@@ -115,6 +117,13 @@ def setup_model(cfg: DictConfig, overrides: list = [], is_train: bool = False, v
     return model
 
 
+def load_dataset(cfg: DictConfig, phase: str = None):
+    cfg = cfg.copy()
+    if phase is not None:
+        cfg.phase = phase
+    return create_dataset(cfg)
+
+
 def get_fig(fig: plt.Figure) -> wandb.Image:
     img = wandb.Image(fig)
     fig.gca().clear()
@@ -145,55 +154,62 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
 
     # Load model again in test mode
     model = setup_model(cfg, is_train=False, verbose=True)
-    dataset = create_dataset(cfg)
-    res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
-                                                  for data in dataset)
-    res = itertools.islice(res_generator, 30)
 
-    if metric is not None:
-        res = reversed(sorted(res, key=lambda x: x["metrics"][metric]))
-    res = list(res)
+    for phase in ("train", "test"):
+        dataset = load_dataset(cfg, phase=phase)
+        dataset_size = len(dataset)
+        if phase == "train":  # only look at first 5000 samples for train
+            dataset_size = min(dataset_size, 5000)
+        res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
+                                                      for data in dataset)
+        res_generator = itertools.islice(res_generator, dataset_size)
+        res = itertools.islice(res_generator, 30)
 
-    def subplot(rows, cols, row, col):
-        return plt.subplot(rows, cols, cols * row + col + 1)
+        if metric is not None:
+            res = reversed(sorted(res, key=lambda x: x["metrics"][metric]))
+        res = list(res)
 
-    fig = plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 6,
-                              (len(res) + 5) * 2.2))
-    plt.suptitle(f"Experiment: {cfg.name}")
-    for row, r in enumerate(res):
-        visuals = r["visuals"]
-        metrics = r["metrics"]
-        splot = partial(subplot, len(res), len(visuals) + 5)
-        for col, (name, visual) in enumerate(visuals.items()):
-            splot(row, col)
-            plt.imshow(visual, cmap="gray")
-            plt.title(name)
+        def subplot(rows, cols, row, col):
+            return plt.subplot(rows, cols, cols * row + col + 1)
+
+        fig = plt.figure(figsize=(len(res[0]["visuals"]) * 2.2 + 6,
+                                  (len(res) + 5) * 2.2))
+        plt.suptitle(f"Experiment: {cfg.name} ({phase} dataset)")
+        for row, r in enumerate(res):
+            visuals = r["visuals"]
+            metrics = r["metrics"]
+            splot = partial(subplot, len(res), len(visuals) + 5)
+            for col, (name, visual) in enumerate(visuals.items()):
+                splot(row, col)
+                plt.imshow(visual, cmap="gray")
+                plt.title(name)
+                plt.axis("off")
+            splot(row, col + 1)
+            for y, (k, v) in zip(np.linspace(.1, .9, len(metrics)), reversed(metrics.items())):
+                plt.text(0., y, k)
+                plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
             plt.axis("off")
-        splot(row, col + 1)
-        for y, (k, v) in zip(np.linspace(.1, .9, len(metrics)), reversed(metrics.items())):
-            plt.text(0., y, k)
-            plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
-        plt.axis("off")
-    plt.savefig(
-        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_vis.png")
-    # run.summary["sample_vis"] = get_fig(fig)
+        plt.savefig(
+            OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_vis.png")
+        # run.summary["sample_vis"] = get_fig(fig)
 
-    metrics = [r["metrics"]
-               for r in tqdm(itertools.chain(res, res_generator), total=len(dataset))]
-    df = pd.DataFrame(metrics)
-    df = df.replace([np.inf, -np.inf], np.nan)
-    print(df.describe())
-    df.to_csv(
-        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_metrics.csv", index=False)
+        metrics = [r["metrics"]
+                   for r in tqdm(itertools.chain(res, res_generator), total=dataset_size, desc=f"processing {phase} dataset")]
+        df = pd.DataFrame(metrics)
+        df = df.replace([np.inf, -np.inf], np.nan)
+        print(df.describe())
+        df.to_csv(
+            OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_metrics.csv", index=False)
 
-    summary_stats.update(
-        {f"mean {k}": v for (k, v) in df.mean().items()})
+        summary_stats.update(
+            {f"{phase} mean {k}": v for (k, v) in df.mean().items()})
     if update_wandb_stats:
         run.summary.update(summary_stats)
         run.update()
-    df_stats = pd.DataFrame(summary_stats.items(), columns=["key", "value"])
+    df_stats = pd.DataFrame(summary_stats.items(),
+                            columns=["key", "value"])
     df_stats.to_csv(
-        OUT_DIR / f"test_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_stats.csv", index=False)
+        OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_stats.csv", index=False)
 
 
 if __name__ == "__main__":
@@ -207,4 +223,6 @@ if __name__ == "__main__":
     initialize(config_path="conf", version_base="1.2")
     test_cfg = compose("test_overrides.yaml")
     cfg = OmegaConf.merge(cfg, test_cfg)
-    test_model(cfg, run, do_latent_substitution=args.substitute)
+    test_model(cfg, run,
+               metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
+               do_latent_substitution=args.substitute)

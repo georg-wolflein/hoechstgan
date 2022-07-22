@@ -13,14 +13,17 @@ def get_dataset_splits(cfg: DictConfig) -> typing.Dict[str, list]:
         k: v / split_total for (k, v) in cfg.dataset.split.items()
     }
     root = Path(cfg.dataset.data_root)
+    splits_folder = root / "_splits"
+    splits_folder.mkdir(parents=True, exist_ok=True)
     args = {k: f"{v:.3f}" for (k, v) in splits_weights.items()}
     try:
-        with next(find(root, "split", "txt", **args)).open("r") as f:
+        split_path = next(find(splits_folder, "split", "txt", **args))
+        with split_path.open("r") as f:
             splits = json.load(f)
-            print("Reusing existing split...")
+            print(f"Reusing existing split ({split_path.name})...")
     except StopIteration:
-        print("Generating new split...")
-        split_path = root / get_filename("split", "txt", **args)
+        print(f"Generating new split ({split_path.name})...")
+        split_path = splits_folder / get_filename("split", "txt", **args)
         json_paths = sorted(x.name for x in root.glob("*.json"))
         np.random.seed(42)
         json_paths = np.random.permutation(json_paths)

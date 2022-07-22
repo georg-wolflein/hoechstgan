@@ -2,10 +2,15 @@
 
 set -e
 
-RUNS="39a9nz4s 278yqnqo o527pi79"
+RUNS_WITH_SUB="39a9nz4s"
+RUNS="278yqnqo 25u4t7u7 1dtelbm7 1rnepw20 3jgvigrj 3s6gmbi9" # 35inrby5
 
 for sub in "" "--substitute"; do
-    for run in $RUNS; do
+    for run in $RUNS_WITH_SUB; do
         poetry run python test.py $run $sub
     done
+done
+
+for run in $RUNS; do
+    poetry run python test.py $run
 done
