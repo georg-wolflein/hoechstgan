@@ -32,7 +32,8 @@ def train(cfg: DictConfig) -> None:
                 epoch_iter += cfg.dataset.batch_size
 
                 model.set_input(data)  # preprocess data
-                model.optimize_parameters()  # compute loss functions, get gradients, update weights
+                # Compute loss functions, get gradients, update weights
+                model.optimize_parameters(epoch=epoch)
 
                 if step % cfg.log_freq == 0:
                     t_data = iter_start_time - iter_data_time

@@ -28,12 +28,30 @@ CHANNELS = {
     "Cy5": "CD8"
 }
 
+CFG_DEFAULTS = {
+    "generator.substitute_input": False
+}
+
+
+def fix_cfg(cfg: DictConfig) -> DictConfig:
+    for key, value in CFG_DEFAULTS.items():
+        *ancestors, child = key.split(".")
+        item = cfg
+        for ancestor in ancestors:
+            if ancestor not in item:
+                item[ancestor] = DictConfig({})
+            item = item[ancestor]
+        if child not in item:
+            item[child] = value
+    return cfg
+
 
 def load_run_cfg(run_id: str) -> DictConfig:
     api = get_api()
     run = api.run(f"{WANDB_ENTITY}/{WANDB_PROJECT}/{run_id}")
     cfg = DictConfig(run.config)
     cfg.wandb_id = run_id
+    cfg = fix_cfg(cfg)
     return cfg, run
 
 

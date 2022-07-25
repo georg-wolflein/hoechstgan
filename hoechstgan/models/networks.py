@@ -1,3 +1,4 @@
+from typing import Callable
 import torch
 import torch.nn as nn
 from torch.nn import init
@@ -125,7 +126,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: list = [], decoders: list = [], outputs: list = [], verbose: bool = True):
+def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: list = [], decoders: list = [], outputs: list = [], verbose: bool = True, input_substitution: Callable = None):
     norm_layer = get_norm_layer(norm_type=norm)
 
     def make_net(factory, **kwargs):
@@ -154,7 +155,7 @@ def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init
         (force_tuple(dec["from"]), dec["to"]): make_net(UnetDecoder, **except_keys(dec, *RESERVED_KEYS)) for dec in decoders
     }
 
-    net = UnetGenerator(encoders, decoders, outputs)
+    net = UnetGenerator(encoders, decoders, outputs, input_substitution)
     if verbose:
         net.describe()
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -296,15 +297,20 @@ class UnetDecoder(nn.ModuleList):
 #                 x = torch.cat((x, x_prev), 1)
 #         return x
 
+def noop(*args, **kwargs):
+    pass
+
+
 class UnetGenerator(nn.Module):
     """Unet-based generator"""
 
-    def __init__(self, encoders: dict, decoders: dict, outputs: list):
+    def __init__(self, encoders: dict, decoders: dict, outputs: list, substitute_input: Callable = None):
         super().__init__()
 
         self.encoders = PairedSerializedModuleDict(encoders)
         self.decoders = PairedSerializedModuleDict(decoders)
         self.outputs = outputs  # names of outputs
+        self.substitute_input = substitute_input if substitute_input is not None else noop
 
     def _decode(self, decoder, *latents):
         # Merge latents layer-wise (concatenate across channel dimension)
@@ -318,7 +324,12 @@ class UnetGenerator(nn.Module):
                 x = torch.cat((x, x_prev), 1)
         return x
 
-    def forward(self, real_A, /, dry_run: bool = False, verbose: bool = None, latent_substitutions: dict = {}):
+    def forward(self, real_A, /,
+                dry_run: bool = False,
+                verbose: bool = None,
+                latent_substitutions: dict = {},
+                real_inputs: dict = {},
+                epoch: int = None):
         if dry_run and verbose is None:
             verbose = True
         log = print if verbose else lambda _: None
@@ -335,7 +346,13 @@ class UnetGenerator(nn.Module):
                     latent = None
                     log(f"  Encoding {enc_from} -> {enc_to}")
                     if not dry_run:
-                        latent = encoder(outputs[enc_from])
+                        output = self.substitute_input(outputs, real_inputs,
+                                                       key=enc_from, epoch=epoch)
+                        if output is None:
+                            output = outputs[enc_from]
+                        else:
+                            log(f"  Substituting input for {enc_from}")
+                        latent = encoder(output)
                         if enc_to in latent_substitutions:
                             log(f"  Substituting latent code for {enc_to}")
                             latent = latent_substitutions[enc_to](latent)

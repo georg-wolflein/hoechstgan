@@ -59,6 +59,7 @@ generator:
   decoders:
     - from: latent_A
       to: fake_B
+  substitute_input: false
 loss:
   generator:
     ground_truth:

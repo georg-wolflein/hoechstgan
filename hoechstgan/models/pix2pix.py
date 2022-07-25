@@ -100,8 +100,8 @@ class Pix2PixModel(BaseModel):
         self.loss_G = self.loss_G_GAN + self.loss_G_ground_truth
         self.loss_G.backward()
 
-    def optimize_parameters(self):
-        self.forward()                   # compute fake images: G(A)
+    def optimize_parameters(self, **kwargs):
+        self.forward(**kwargs)                   # compute fake images: G(A)
         # update D
         self.set_requires_grad(self.netD, True)  # enable backprop for D
         self.optimizer_D.zero_grad()     # set D's gradients to zero

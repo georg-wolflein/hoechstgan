@@ -5,6 +5,21 @@ from .base_model import BaseModel
 from . import networks
 
 
+def make_input_substitution(cfg: OmegaConf):
+    if not cfg.generator.substitute_input:
+        return None
+
+    num_epochs = cfg.learning_rate.n_epochs_inital + cfg.learning_rate.n_epochs_decay
+
+    def substitute_input(outputs: dict, real_inputs: dict, key: str, epoch: int):
+        out = outputs[key]
+        if key == "fake_B":
+            coef = epoch / (num_epochs-1)
+            return coef * out + (1.-coef) * real_inputs["real_B"]
+
+    return substitute_input
+
+
 class HoechstGANModel(BaseModel):
     """This is the pix2pix model, as described in https://arxiv.org/pdf/1611.07004.pdf.
 
@@ -18,7 +33,7 @@ class HoechstGANModel(BaseModel):
     and a '--gan_mode' vanilla GAN loss (the cross-entropy objective used in the orignal GAN paper).
     """
 
-    def __init__(self, cfg):
+    def __init__(self, cfg: OmegaConf):
         super().__init__(cfg)
         self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
         self.loss_names = ["G", "D"] + \
@@ -41,7 +56,8 @@ class HoechstGANModel(BaseModel):
                                           cfg.generator.decoders),
                                       outputs=OmegaConf.to_container(
                                           cfg.generator.outputs),
-                                      verbose=cfg.verbose)
+                                      verbose=cfg.verbose,
+                                      input_substitution=make_input_substitution(cfg) if cfg.is_train else None)
 
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD1 = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,
@@ -173,8 +189,14 @@ class HoechstGANModel(BaseModel):
     #     self.loss_G2 = self.loss_G2_GAN + self.loss_G2_ground_truth
     #     self.loss_G2.backward()
 
-    def optimize_parameters(self):
-        self.forward()                   # compute fake images: G(A)
+    def optimize_parameters(self, **kwargs):
+        real_inputs = {
+            "real_A": self.real_A,
+            "real_B": self.real_B,
+            "real_C": self.real_C,
+        }
+        # compute fake images: G(A)
+        self.forward(**kwargs, real_inputs=real_inputs)
         # update D
         self.set_requires_grad(self.netD1, True)  # enable backprop for D
         self.set_requires_grad(self.netD2, True)  # enable backprop for D
