@@ -16,7 +16,7 @@ services:
     ports:
       - "8888:8888"
       - "9999:9999"
-    shm_size: "1g"
+    shm_size: "16gb"
     ulimits:
       memlock: -1
       stack: 67108864

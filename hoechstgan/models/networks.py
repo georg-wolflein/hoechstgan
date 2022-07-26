@@ -1,4 +1,5 @@
 from typing import Callable
+from omegaconf import DictConfig, OmegaConf
 import torch
 import torch.nn as nn
 from torch.nn import init
@@ -6,6 +7,7 @@ import functools
 from torch.optim import lr_scheduler
 
 from ..util.module import PairedSerializedModuleDict
+from ..util.composites import composite_factory
 
 
 ###############################################################################
@@ -126,8 +128,17 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     return net
 
 
-def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init_type='normal', init_gain=0.02, gpu_ids=[], encoders: list = [], decoders: list = [], outputs: list = [], verbose: bool = True, input_substitution: Callable = None):
-    norm_layer = get_norm_layer(norm_type=norm)
+def define_G(cfg: DictConfig):
+    input_nc = cfg.dataset.input.num_channels
+    output_nc = cfg.dataset.outputs.B.num_channels
+    filters = cfg.generator.filters
+    use_dropout = cfg.generator.dropout
+    encoders = OmegaConf.to_container(cfg.generator.encoders)
+    decoders = OmegaConf.to_container(cfg.generator.decoders)
+    outputs = OmegaConf.to_container(cfg.generator.outputs)
+    composites = OmegaConf.to_container(cfg.generator.composites)
+
+    norm_layer = get_norm_layer(norm_type=cfg.norm)
 
     def make_net(factory, **kwargs):
         defaults = dict(input_nc=input_nc, output_nc=output_nc, num_downs=8, filters=filters,
@@ -154,11 +165,15 @@ def define_G(input_nc, output_nc, filters, norm='batch', use_dropout=False, init
     decoders = {
         (force_tuple(dec["from"]), dec["to"]): make_net(UnetDecoder, **except_keys(dec, *RESERVED_KEYS)) for dec in decoders
     }
+    composites = {
+        (force_tuple(comp[cfg.phase]["from"]), comp["to"]): composite_factory[comp[cfg.phase].get("schedule", "default")](cfg) for comp in composites
+    }
+    reals = ["A", *cfg.dataset.outputs.keys()]
 
-    net = UnetGenerator(encoders, decoders, outputs, input_substitution)
-    if verbose:
+    net = UnetGenerator(encoders, decoders, composites, reals, outputs)
+    if cfg.verbose:
         net.describe()
-    return init_net(net, init_type, init_gain, gpu_ids)
+    return init_net(net, cfg.initialization, cfg.initialization_scale, cfg.gpus)
 
 
 def define_D(input_nc, ndf, n_layers_D=3, norm='batch', init_type='normal', init_gain=0.02, gpu_ids=[]):
@@ -297,20 +312,18 @@ class UnetDecoder(nn.ModuleList):
 #                 x = torch.cat((x, x_prev), 1)
 #         return x
 
-def noop(*args, **kwargs):
-    pass
-
 
 class UnetGenerator(nn.Module):
     """Unet-based generator"""
 
-    def __init__(self, encoders: dict, decoders: dict, outputs: list, substitute_input: Callable = None):
+    def __init__(self, encoders: dict, decoders: dict, composites: list, reals: list, outputs: list):
         super().__init__()
 
         self.encoders = PairedSerializedModuleDict(encoders)
         self.decoders = PairedSerializedModuleDict(decoders)
+        self.reals = reals
         self.outputs = outputs  # names of outputs
-        self.substitute_input = substitute_input if substitute_input is not None else noop
+        self.composites = composites
 
     def _decode(self, decoder, *latents):
         # Merge latents layer-wise (concatenate across channel dimension)
@@ -335,7 +348,8 @@ class UnetGenerator(nn.Module):
         log = print if verbose else lambda _: None
         log("Dry run of generator:")
         outputs = {
-            "real_A": real_A
+            "real_A": real_A,
+            **real_inputs
         }
         latents = {}
         progress = True
@@ -346,17 +360,21 @@ class UnetGenerator(nn.Module):
                     latent = None
                     log(f"  Encoding {enc_from} -> {enc_to}")
                     if not dry_run:
-                        output = self.substitute_input(outputs, real_inputs,
-                                                       key=enc_from, epoch=epoch)
-                        if output is None:
-                            output = outputs[enc_from]
-                        else:
-                            log(f"  Substituting input for {enc_from}")
+                        output = outputs[enc_from]
                         latent = encoder(output)
                         if enc_to in latent_substitutions:
                             log(f"  Substituting latent code for {enc_to}")
                             latent = latent_substitutions[enc_to](latent)
                     latents[enc_to] = latent
+                    progress = True
+            for (comp_from, comp_to), composite in self.composites.items():
+                if comp_to not in outputs and all(map(outputs.keys().__contains__, comp_from)):
+                    output = None
+                    log(f"  Compositing {','.join(comp_from)} -> {comp_to}")
+                    if not dry_run:
+                        output = composite(
+                            *(outputs[c] for c in comp_from), epoch=epoch)
+                    outputs[comp_to] = output
                     progress = True
             for (dec_from, dec_to), decoder in self.decoders.items():
                 if dec_to not in outputs and all(map(latents.keys().__contains__, dec_from)):
@@ -370,7 +388,11 @@ class UnetGenerator(nn.Module):
         log(f"  Done, generated following outputs: {', '.join(outputs)}")
         return tuple(outputs[k] for k in self.outputs)
 
-    describe = functools.partialmethod(forward, None, dry_run=True)
+    def describe(self):
+        self.forward(None, dry_run=True,
+                     real_inputs={
+                         f"real_{x}": None for x in self.reals
+                     })
 
 
 class UnetDown(nn.Sequential):

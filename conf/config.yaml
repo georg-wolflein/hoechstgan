@@ -59,7 +59,7 @@ generator:
   decoders:
     - from: latent_A
       to: fake_B
-  substitute_input: false
+  composites: []
 loss:
   generator:
     ground_truth:
@@ -72,3 +72,4 @@ visualize_freq: 5000 # log visualizations every n iterations, must be a multiple
 save_epoch_freq: 1
 save_latest_freq: 5000
 save_by_iter: false # if false, save only the latest model
+num_epochs: ${sum:${learning_rate.n_epochs_initial},${learning_rate.n_epochs_decay}}

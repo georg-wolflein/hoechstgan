@@ -29,15 +29,7 @@ class Pix2PixModel(BaseModel):
         else:  # at test time, only load G
             self.model_names = ['G']
         # define networks (both generator and discriminator)
-        self.netG = networks.define_G(cfg.dataset.input.num_channels, cfg.dataset.outputs.B.num_channels, cfg.generator.filters,
-                                      cfg.norm, cfg.generator.dropout, cfg.initialization, cfg.initialization_scale, cfg.gpus,
-                                      encoders=OmegaConf.to_container(
-                                          cfg.generator.encoders),
-                                      decoders=OmegaConf.to_container(
-                                          cfg.generator.decoders),
-                                      outputs=OmegaConf.to_container(
-                                          cfg.generator.outputs),
-                                      verbose=cfg.verbose)
+        self.netG = networks.define_G(cfg)
         if self.is_train:  # define a discriminator; conditional GANs need to take both input and output images; Therefore, #channels for D is input_nc + output_nc
             self.netD = networks.define_D(cfg.dataset.input.num_channels + cfg.dataset.outputs.B.num_channels, cfg.discriminator.filters, cfg.discriminator.layers,
                                           cfg.norm, cfg.initialization, cfg.initialization_scale, cfg.gpus)

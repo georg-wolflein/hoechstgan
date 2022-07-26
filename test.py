@@ -1,5 +1,5 @@
 
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, ListConfig, OmegaConf
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
@@ -29,7 +29,7 @@ CHANNELS = {
 }
 
 CFG_DEFAULTS = {
-    "generator.substitute_input": False
+    "generator.composites": ListConfig([])
 }
 
 
@@ -152,6 +152,7 @@ def get_fig(fig: plt.Figure) -> wandb.Image:
 def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 relative MIR", do_latent_substitution: bool = False):
     summary_stats = dict()
     update_wandb_stats = not do_latent_substitution  # only update stats if not sub
+    # update_wandb_stats = False
     filename_suffix = "sub" if do_latent_substitution else ""
 
     # Load model in train mode to gather some stats
@@ -208,7 +209,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
                 plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
             plt.axis("off")
         plt.savefig(
-            OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_vis.png")
+            OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_vis.png")
         # run.summary["sample_vis"] = get_fig(fig)
 
         metrics = [r["metrics"]
@@ -217,7 +218,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
         df = df.replace([np.inf, -np.inf], np.nan)
         print(df.describe())
         df.to_csv(
-            OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_metrics.csv", index=False)
+            OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_metrics.csv", index=False)
 
         summary_stats.update(
             {f"{phase} mean {k}": v for (k, v) in df.mean().items()})
@@ -227,7 +228,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
     df_stats = pd.DataFrame(summary_stats.items(),
                             columns=["key", "value"])
     df_stats.to_csv(
-        OUT_DIR / f"{phase}_{cfg.name}_{cfg.wandb_id}_{filename_suffix}_stats.csv", index=False)
+        OUT_DIR / f"{cfg.name}_{cfg.wandb_id}__{filename_suffix}_stats.csv", index=False)
 
 
 if __name__ == "__main__":
