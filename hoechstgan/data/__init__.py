@@ -3,7 +3,7 @@ import torch
 from .dataset import Dataset
 
 
-class CustomDatasetDataLoader():
+class CustomDatasetDataLoader:
 
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg

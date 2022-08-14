@@ -48,7 +48,6 @@ def compute_stats(cfg: DictConfig) -> None:
 def aggregate(df: pd.DataFrame, phase: str):
     df = df.agg(["count", "sum", "mean", "std", "min", "max"])
     df.to_csv(f"dataset_stats_{phase}.csv")
-    # print(df)
 
 
 if __name__ == "__main__":
