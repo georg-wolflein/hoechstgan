@@ -8,18 +8,13 @@ from tqdm import tqdm
 def index_subdir(root: Path):
     with (root / "index.txt").open("w") as f:
         subdirs = [x for x in root.iterdir() if x.is_dir()]
-        for subdir in (pbar := tqdm(subdirs)):
-            pbar.set_description(
-                f"Processing {subdir.relative_to(root.parent)}")
+        for i, subdir in enumerate(subdirs, 1):
             if subdir.is_dir():
-                i = 0
-                for file in os.scandir(subdir):
-                    if file.is_file() and file.name.endswith(f".json"):
-                        f.write(subdir.name + "/" + file.name + "\n")
-                        i += 1
-                        if i % 10 == 0:
-                            pbar.set_description(
-                                f"Processing {subdir.relative_to(root.parent)} ({i} files)")
+                for file in tqdm((f for f in os.scandir(subdir)
+                                  if f.is_file() and f.name.endswith(".json")),
+                                 desc=f"Processing {subdir.name} (#{i}/{len(subdirs)} in {root.name})",
+                                 unit="files"):
+                    f.write(subdir.name + "/" + file.name + "\n")
 
 
 @hydra.main(config_path="conf", config_name="config", version_base="1.2")

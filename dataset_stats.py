@@ -42,16 +42,24 @@ def compute_stats(cfg: DictConfig) -> None:
             )
 
     df = pd.DataFrame(list(compute()))
+    return df
+
+
+def aggregate(df: pd.DataFrame, phase: str):
     df = df.agg(["count", "sum", "mean", "std", "min", "max"])
-    df.to_csv(f"dataset_stats_{cfg.phase}.csv")
+    df.to_csv(f"dataset_stats_{phase}.csv")
     print(df)
 
 
 if __name__ == "__main__":
     initialize(config_path="conf", version_base="1.2")
+    dfs = []
     for phase in "train", "test":
         cfg = compose("config.yaml", overrides=["+experiment=compute_stats",
                                                 f"phase={phase}",
                                                 f"is_train={str(phase == 'train').lower()}"])
-        compute_stats(cfg)
-        break
+        df = compute_stats(cfg)
+        dfs.append(df)
+        aggregate(df, phase)
+
+    aggregate(pd.concat(dfs), "all")
