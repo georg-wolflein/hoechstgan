@@ -33,7 +33,7 @@ def compute_stats(cfg: DictConfig) -> None:
     def compute():
         data_generator = itertools.chain.from_iterable(
             map(yield_from_dict, dataset))
-        data_generator = itertools.islice(data_generator, 500)
+        # data_generator = itertools.islice(data_generator, 500)
         for data in tqdm(data_generator, total=dataset_size, desc=f"processing {cfg.phase} dataset"):
             yield dict(
                 (f"{channel} {stat}", value)
@@ -48,7 +48,7 @@ def compute_stats(cfg: DictConfig) -> None:
 def aggregate(df: pd.DataFrame, phase: str):
     df = df.agg(["count", "sum", "mean", "std", "min", "max"])
     df.to_csv(f"dataset_stats_{phase}.csv")
-    print(df)
+    # print(df)
 
 
 if __name__ == "__main__":
