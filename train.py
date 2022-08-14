@@ -1,6 +1,7 @@
 import hydra
 from omegaconf import DictConfig
 import time
+from tqdm import tqdm
 
 from hoechstgan.models import create_model
 from hoechstgan.data import create_dataset
@@ -25,7 +26,8 @@ def train(cfg: DictConfig) -> None:
             epoch_start_time = time.time()  # timer for entire epoch
             iter_data_time = time.time()    # timer for data loading per iteration
             epoch_iter = 0  # number of training iterations in current epoch
-            for i, data in enumerate(dataset):  # inner loop within one epoch
+            # Inner loop within one epoch
+            for data in tqdm(dataset, desc=f"Epoch {epoch}", total=int(dataset_size / cfg.dataset.batch_size)):
                 iter_start_time = time.time()  # timer for computation per iteration
 
                 step += cfg.dataset.batch_size
