@@ -3,6 +3,6 @@ defaults:
   - _self_
 
 props:
-  channel: CD3
+  channel: Hoechst
   mode: mask
   mask_type: cells

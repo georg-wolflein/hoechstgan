@@ -1,0 +1,19 @@
+# @package _global_
+defaults:
+  - /dataset@dataset.outputs.Hoechst_mask: hoechst
+  - /dataset@dataset.outputs.CD3_mask: cd3
+  - /dataset@dataset.outputs.CD8_mask: cd8
+  - /dataset@dataset.outputs.C: cy5
+  - override /dataset@dataset.outputs.B: cy3
+name: compute_stats
+dataset:
+  batch_size: 32
+  num_threads: 8
+  shuffle: false
+  outputs:
+    Hoechst_mask:
+      transforms: [_nonorm_]
+    CD3_mask:
+      transforms: [_nonorm_]
+    CD8_mask:
+      transforms: [_nonorm_]

@@ -21,6 +21,8 @@ def get_transform(cfg: DictConfig, opt: DictConfig) -> typing.Callable[[Image.Im
     if grayscale:
         funcs.append(T.Grayscale(1))
     for transform in transforms:
+        if transform == "_nonorm_":
+            continue
         if isinstance(transform, str):
             name = transform
             opt = DictConfig({})
@@ -28,8 +30,9 @@ def get_transform(cfg: DictConfig, opt: DictConfig) -> typing.Callable[[Image.Im
             name, opt = next(iter(transform.items()))
         funcs.append(find_transform_by_name(name)(opt))
     funcs.append(T.ToTensor())
-    if grayscale:
-        funcs.append(T.Normalize((0.5,), (0.5,)))
-    else:
-        funcs.append(T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
+    if "_nonorm_" not in transforms:
+        if grayscale:
+            funcs.append(T.Normalize((0.5,), (0.5,)))
+        else:
+            funcs.append(T.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)))
     return T.Compose(funcs)

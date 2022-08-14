@@ -1,6 +1,6 @@
 defaults:
-- default.yaml
-- _self_
+  - default.yaml
+  - _self_
 
 props:
   channel: Cy5

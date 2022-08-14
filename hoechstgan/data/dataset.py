@@ -2,11 +2,29 @@ from pathlib import Path
 import json
 from PIL import Image
 from omegaconf import DictConfig
-
-from hoechstgan.data.split_dataset import get_dataset_splits
+import numpy as np
 
 from .transforms import get_transform
 from ..util.dataset import get_channel_file_from_metadata
+
+
+def get_json_paths(cfg: DictConfig) -> list:
+    root = Path(cfg.dataset.data_root)
+
+    split_dir = root / cfg.phase
+    index_file = split_dir.joinpath("index.txt")
+    if not index_file.exists():
+        raise FileNotFoundError(
+            f"{index_file} does not exist, fix by running index_dataset.py")
+    paths = [split_dir.joinpath(x.strip())
+             for x in index_file.open("r")]
+
+    if cfg.dataset.shuffle:
+        np.random.seed(42)
+        paths = np.random.permutation(paths).tolist()
+
+    print(f"Loaded {len(paths)} samples in {cfg.phase} dataset.")
+    return paths
 
 
 class Dataset:
@@ -14,10 +32,10 @@ class Dataset:
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
         self.root = Path(self.cfg.dataset.data_root)
-        self.json_paths = get_dataset_splits(cfg)[cfg.phase]
+        self.json_paths = get_json_paths(cfg)
 
     def __getitem__(self, index):
-        json_path = self.root / self.json_paths[index]
+        json_path = self.json_paths[index]
 
         with json_path.open("r") as f:
             metadata = json.load(f)
