@@ -3,7 +3,7 @@
 set -e
 
 RUNS_WITH_SUB=""
-RUNS="24hclls7 2qxrg3f7 1fykloy3 1t600sps 464bpzdq 3rxznafm 3s6gmbi9 3jgvigrj 1rnepw20 1dtelbm7 35inrby5 25u4t7u7 278yqnqo 39a9nz4s"
+RUNS="3eabibhv ydqqzn8o 1db46j9w 1sc8x79n"
 
 for sub in "" "--substitute"; do
     for run in $RUNS_WITH_SUB; do

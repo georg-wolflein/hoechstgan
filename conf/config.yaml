@@ -30,10 +30,6 @@ dataset:
   shuffle: true
   num_threads: 8 # number of threads for loading data
   max_size: .inf # maximum size of the dataset per epoch
-  # split:
-  #   train: 90
-  #   val: 0
-  #   test: 10
 norm: batch
 initialization: normal
 initialization_scale: .02 # scaling factor

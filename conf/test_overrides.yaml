@@ -1,7 +1,7 @@
 is_train: false
 phase: test
 load_checkpoint: latest
-gpus: [2, 3]
+gpus: [2]
 dataset:
   batch_size: 64 # reduce batch size if you get CUDA out of memory error
   num_threads: 4

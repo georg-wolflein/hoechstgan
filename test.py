@@ -58,7 +58,7 @@ def load_run_cfg(run_id: str) -> DictConfig:
 def compute_mask_intensity_ratio(img, mask) -> float:
     numerator = img[mask].mean()
     denominator = img[~mask].mean()
-    return numerator / denominator if denominator != 0 else 0
+    return numerator / denominator if denominator != 0 else 0, numerator, denominator
 
 
 def get_img(tensor):
@@ -100,14 +100,20 @@ def perform_test(data, model, cfg, latent_substitutions=None):
             l_real = label(mask, connectivity=1)
             num_cells_real = l_real.max()
 
-            mir_real = compute_mask_intensity_ratio(real_X, mask)
-            mir_fake = compute_mask_intensity_ratio(fake_X, mask)
+            mir_real, mir_real_num, mir_real_den = compute_mask_intensity_ratio(
+                real_X, mask)
+            mir_fake, mir_fake_num, mir_fake_den = compute_mask_intensity_ratio(
+                fake_X, mask)
             mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
 
             metrics.update({
                 f"{channel}+ cells": num_cells_real,
                 f"{channel} real MIR": mir_real,
+                f"{channel} real MIR numerator": mir_real_num,
+                f"{channel} real MIR denominator": mir_real_den,
                 f"{channel} fake MIR": mir_fake,
+                f"{channel} fake MIR numerator": mir_fake_num,
+                f"{channel} fake MIR denominator": mir_fake_den,
                 f"{channel} relative MIR": mir_ratio
             })
             visuals.update({
@@ -177,8 +183,8 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
     for phase in ("train", "test"):
         dataset = load_dataset(cfg, phase=phase)
         dataset_size = len(dataset)
-        if phase == "train":  # only look at first 5000 samples for train
-            dataset_size = min(dataset_size, 5000)
+        # Test set is ~150000, so we choose only 150000 samples
+        dataset_size = min(dataset_size, 150000)
         res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
                                                       for data in dataset)
         res_generator = itertools.islice(res_generator, dataset_size)
