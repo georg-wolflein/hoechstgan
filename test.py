@@ -29,7 +29,8 @@ CHANNELS = {
 }
 
 CFG_DEFAULTS = {
-    "generator.composites": ListConfig([])
+    "generator.composites": ListConfig([]),
+    "loss.generator.coefficient": 1.,
 }
 
 
@@ -234,8 +235,10 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
                 plt.axis("off")
             splot(row, col + 1)
             for y, (k, v) in zip(np.linspace(.1, .9, len(metrics)), reversed(metrics.items())):
-                plt.text(0., y, k)
-                plt.text(1., y, f"{v:.3f}" if isinstance(v, float) else str(v))
+                if "relative" in k or k == "file":
+                    plt.text(0., y, k)
+                    plt.text(1., y, f"{v:.3f}" if isinstance(
+                        v, float) else str(v))
             plt.axis("off")
         plt.savefig(
             OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_vis.png")

@@ -21,24 +21,14 @@ def make_input_substitution(cfg: OmegaConf):
 
 
 class HoechstGANModel(BaseModel):
-    """This is the pix2pix model, as described in https://arxiv.org/pdf/1611.07004.pdf.
-
-    Implementation inspired by https://github.com/junyanz/pytorch-CycleGAN-and-pix2pix.
-    """
-
-    """
-    The model training requires '--dataset_mode aligned' dataset.
-    By default, it uses a '--netG unet256' U-Net generator,
-    a '--netD basic' discriminator (PatchGAN),
-    and a '--gan_mode' vanilla GAN loss (the cross-entropy objective used in the orignal GAN paper).
-    """
 
     def __init__(self, cfg: OmegaConf):
         super().__init__(cfg)
-        self.generator_gt_losses = cfg.loss.generator.ground_truth.keys()
+        self.generator_gt_losses = {k: weight for (k, weight) in cfg.loss.generator.ground_truth.items()
+                                    if weight != 0.}
         self.loss_names = ["G", "D"] + \
-            list(itertools.chain(*[[f"G{i}_GAN", f"G{i}_ground_truth",
-                                    *(f"G{i}_ground_truth_{x}" for x in self.generator_gt_losses),
+            list(itertools.chain(*[[f"G{i}", f"G{i}_GAN", f"G{i}_ground_truth",
+                                    *(f"G{i}_ground_truth_{x}" for x in self.generator_gt_losses.keys()),
                                     f"D{i}_real", f"D{i}_fake"]
                                    for i in (1, 2)]))
         self.visual_names = [
@@ -125,7 +115,7 @@ class HoechstGANModel(BaseModel):
 
         def gt_losses(i):
             G_gt_losses = []
-            for loss_name, weight in self.cfg.loss.generator.ground_truth.items():
+            for loss_name, weight in self.generator_gt_losses.items():
                 L = self.criteria_ground_truth[loss_name.lower()]
                 if i == 1:
                     L = L(self.fake_B, self.real_B) * weight
@@ -139,46 +129,10 @@ class HoechstGANModel(BaseModel):
         # combine loss and calculate gradients
         self.loss_G1 = self.loss_G1_GAN + self.loss_G1_ground_truth
         self.loss_G2 = self.loss_G2_GAN + self.loss_G2_ground_truth
-        self.loss_G = self.loss_G1 + self.loss_G2  # TODO: divide by 2?
+        self.loss_G = self.loss_G1 + self.loss_G2
+        # TODO: test divide by 2 using coefficient below
+        self.loss_G = self.loss_G * self.cfg.loss.generator.coefficient
         self.loss_G.backward()
-
-    # def backward_G1(self):
-    #     """Calculate GAN and L1 loss for the generator"""
-    #     # First, G(A) should fake the discriminator
-    #     fake_AB = torch.cat((self.real_A, self.fake_B), 1)
-    #     pred_fake_AB = self.netD1(fake_AB)
-    #     self.loss_G1_GAN = self.criterionGAN(pred_fake_AB, True)
-    #     # Second, G(A) = B
-
-    #     G_gt_losses = []
-    #     for loss_name, weight in self.cfg.loss.generator.ground_truth.items():
-    #         L = self.criteria_ground_truth[loss_name.lower()]
-    #         L = L(self.fake_B, self.real_B) * weight
-    #         setattr(self, f"loss_G1_ground_truth_{loss_name.lower()}", L)
-    #         G_gt_losses.append(L)
-    #     self.loss_G1_ground_truth = sum(G_gt_losses)
-    #     # combine loss and calculate gradients
-    #     self.loss_G1 = self.loss_G1_GAN + self.loss_G1_ground_truth
-    #     self.loss_G1.backward()
-
-    # def backward_G2(self):
-    #     """Calculate GAN and L1 loss for the generator"""
-    #     # First, G(A) should fake the discriminator
-    #     fake_AC = torch.cat((self.real_A, self.fake_C), 1)
-    #     pred_fake_AC = self.netD1(fake_AC)
-    #     self.loss_G2_GAN = self.criterionGAN(pred_fake_AC, True)
-    #     # Second, G(A) = C
-
-    #     G_gt_losses = []
-    #     for loss_name, weight in self.cfg.loss.generator.ground_truth.items():
-    #         L = self.criteria_ground_truth[loss_name.lower()]
-    #         L = L(self.fake_C, self.real_C) * weight
-    #         setattr(self, f"loss_G2_ground_truth_{loss_name.lower()}", L)
-    #         G_gt_losses.append(L)
-    #     self.loss_G2_ground_truth = sum(G_gt_losses)
-    #     # combine loss and calculate gradients
-    #     self.loss_G2 = self.loss_G2_GAN + self.loss_G2_ground_truth
-    #     self.loss_G2.backward()
 
     def optimize_parameters(self, **kwargs):
         real_inputs = {
