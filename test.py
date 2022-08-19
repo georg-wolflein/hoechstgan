@@ -56,6 +56,8 @@ def load_run_cfg(run_id: str) -> DictConfig:
 
 
 def compute_mask_intensity_ratio(img, mask) -> float:
+    if mask.sum() == 0:
+        return np.nan, np.nan, np.nan
     numerator = img[mask].mean()
     denominator = img[~mask].mean()
     return numerator / denominator if denominator != 0 else 0, numerator, denominator
@@ -63,6 +65,22 @@ def compute_mask_intensity_ratio(img, mask) -> float:
 
 def get_img(tensor):
     return (tensor.cpu().numpy().squeeze() + 1) / 2.
+
+
+def compute_percent_tp_cells(img, mask):
+    thresholds = np.arange(0.1, 1, 0.1)
+    L = label(mask, connectivity=1)
+    L, img = L.flatten(), img.flatten()
+    num_cells = L.max()
+    if num_cells == 0:
+        return zip(thresholds, [1.] * len(thresholds))
+    masks = np.expand_dims(L, -1) == np.arange(1, L.max() + 1)
+    pixels_per_cell = masks.sum(axis=0)
+    mult_mask = np.expand_dims(img, -1) * masks
+    mean_intensity_per_cell = mult_mask.sum(axis=0) / pixels_per_cell
+    thresholds_mask = mean_intensity_per_cell >= np.expand_dims(thresholds, -1)
+    num_cells_per_threshold = np.sum(thresholds_mask, axis=1)
+    return zip(thresholds, num_cells_per_threshold / num_cells)
 
 
 def perform_test(data, model, cfg, latent_substitutions=None):
@@ -116,6 +134,11 @@ def perform_test(data, model, cfg, latent_substitutions=None):
                 f"{channel} fake MIR denominator": mir_fake_den,
                 f"{channel} relative MIR": mir_ratio
             })
+            for X_name, X in {"real": real_X, "fake": fake_X}.items():
+                metrics.update({
+                    f"{channel}+ cells {X_name} TP @{threshold:.1f}": percent_identified
+                    for (threshold, percent_identified) in compute_percent_tp_cells(X, mask)
+                })
             visuals.update({
                 f"fake_{out}": fake_X,
                 **({f"fake_{out}_sub": get_img(fake_outputs_sub[out][i])} if latent_substitutions else {}),
