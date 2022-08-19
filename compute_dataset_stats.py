@@ -1,4 +1,5 @@
 import itertools
+from pathlib import Path
 import pandas as pd
 import matplotlib.pyplot as plt
 from hydra import initialize, compose
@@ -46,8 +47,10 @@ def compute_stats(cfg: DictConfig) -> None:
 
 
 def aggregate(df: pd.DataFrame, phase: str):
+    out_folder = Path("results")
+    out_folder.mkdir(exist_ok=True)
     df = df.agg(["count", "sum", "mean", "std", "min", "max"])
-    df.to_csv(f"dataset_stats_{phase}.csv")
+    df.to_csv(out_folder / f"dataset_stats_{phase}.csv")
 
 
 if __name__ == "__main__":
