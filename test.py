@@ -31,6 +31,8 @@ CHANNELS = {
 CFG_DEFAULTS = {
     "generator.composites": ListConfig([]),
     "loss.generator.coefficient": 1.,
+    "loss.discriminator.coefficient": 1.,
+    "discriminator.type": "separate"
 }
 
 

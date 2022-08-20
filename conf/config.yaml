@@ -45,6 +45,7 @@ gan: pix2pix
 discriminator:
   filters: 64
   layers: 3
+  type: separate # separate | joint
 generator:
   filters: 64
   dropout: true
@@ -62,6 +63,8 @@ loss:
       l1: 100.0
       l2: 0.0
       kl: 0.0
+    coefficient: 1. # TODO: try .5
+  discriminator:
     coefficient: 1. # TODO: try .5
 verbose: true
 log_freq: 100 # log metrics every n iterations
