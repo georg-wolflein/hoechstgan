@@ -34,7 +34,6 @@ def train(cfg: DictConfig) -> None:
                 epoch_iter += cfg.dataset.batch_size
                 # epoch number, but continuous (i.e. epoch 1 on step 3/10 will be epoch 1.3)
                 continuous_epoch = epoch + min(1., epoch_iter / dataset_size)
-                print(epoch, continuous_epoch)
 
                 model.set_input(data)  # preprocess data
                 # Compute loss functions, get gradients, update weights
