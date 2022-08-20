@@ -133,10 +133,10 @@ def define_G(cfg: DictConfig):
     output_nc = cfg.dataset.outputs.B.num_channels
     filters = cfg.generator.filters
     use_dropout = cfg.generator.dropout
-    encoders = OmegaConf.to_container(cfg.generator.encoders)
-    decoders = OmegaConf.to_container(cfg.generator.decoders)
-    outputs = OmegaConf.to_container(cfg.generator.outputs)
-    composites = OmegaConf.to_container(cfg.generator.composites)
+    encoders = OmegaConf.to_container(cfg.generator.encoders, resolve=True)
+    decoders = OmegaConf.to_container(cfg.generator.decoders, resolve=True)
+    outputs = OmegaConf.to_container(cfg.generator.outputs, resolve=True)
+    composites = OmegaConf.to_container(cfg.generator.composites, resolve=True)
 
     norm_layer = get_norm_layer(norm_type=cfg.norm)
 
@@ -160,13 +160,20 @@ def define_G(cfg: DictConfig):
     RESERVED_KEYS = ("from", "to")
 
     encoders = {
-        (enc["from"], enc["to"]): make_net(UnetEncoder, **except_keys(enc, *RESERVED_KEYS)) for enc in encoders
+        (enc["from"], enc["to"]):
+        make_net(UnetEncoder, **except_keys(enc, *RESERVED_KEYS))
+        for enc in encoders
     }
     decoders = {
-        (force_tuple(dec["from"]), dec["to"]): make_net(UnetDecoder, **except_keys(dec, *RESERVED_KEYS)) for dec in decoders
+        (force_tuple(dec["from"]), dec["to"]):
+        make_net(UnetDecoder, **except_keys(dec, *RESERVED_KEYS))
+        for dec in decoders
     }
     composites = {
-        (force_tuple(comp[cfg.phase]["from"]), comp["to"]): composite_factory[comp[cfg.phase].get("schedule", "default")](cfg) for comp in composites
+        (force_tuple(comp[cfg.phase]["from"]), comp["to"]):
+            composite_factory[comp[cfg.phase].get("schedule", "default")](
+                **comp[cfg.phase].get("args", dict()))
+        for comp in composites
     }
     reals = ["A", *cfg.dataset.outputs.keys()]
 
@@ -342,7 +349,7 @@ class UnetGenerator(nn.Module):
                 verbose: bool = None,
                 latent_substitutions: dict = {},
                 real_inputs: dict = {},
-                epoch: int = None):
+                epoch: float = None):
         if dry_run and verbose is None:
             verbose = True
         log = print if verbose else lambda _: None

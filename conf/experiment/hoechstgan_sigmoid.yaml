@@ -21,6 +21,9 @@ generator:
     - to: composite_B
       train:
         from: [real_B, fake_B]
-        schedule: linear
+        schedule: sigmoid
+        args:
+          from_epoch: 8
+          to_epoch: 12
       test:
         from: fake_B

@@ -1,0 +1,29 @@
+# @package _global_
+defaults:
+  - /dataset@dataset.outputs.C: cy5
+  - override /dataset@dataset.outputs.B: cy3
+name: hoechstgan_composite
+gan: hoechstgan
+generator:
+  outputs: [fake_B, fake_C]
+  encoders:
+    - from: real_A
+      to: latent_A
+    - from: composite_B
+      to: latent_B
+  decoders:
+    - from: latent_A
+      to: fake_B
+    - from: [latent_A, latent_B]
+      to: fake_C
+      filters: 128
+  composites:
+    - to: composite_B
+      train:
+        from: [real_B, fake_B]
+        schedule: linear
+        args:
+          from_epoch: 1
+          to_epoch: ${sum:${num_epochs},-1}
+      test:
+        from: fake_B

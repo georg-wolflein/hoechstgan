@@ -27,15 +27,18 @@ def train(cfg: DictConfig) -> None:
             iter_data_time = time.time()    # timer for data loading per iteration
             epoch_iter = 0  # number of training iterations in current epoch
             # Inner loop within one epoch
-            for data in tqdm(dataset, desc=f"Epoch {epoch}", total=int(dataset_size / cfg.dataset.batch_size)):
+            for data in tqdm(dataset, desc=f"Epoch {epoch}", total=dataset_size // cfg.dataset.batch_size):
                 iter_start_time = time.time()  # timer for computation per iteration
 
                 step += cfg.dataset.batch_size
                 epoch_iter += cfg.dataset.batch_size
+                # epoch number, but continuous (i.e. epoch 1 on step 3/10 will be epoch 1.3)
+                continuous_epoch = epoch + min(1., epoch_iter / dataset_size)
+                print(epoch, continuous_epoch)
 
                 model.set_input(data)  # preprocess data
                 # Compute loss functions, get gradients, update weights
-                model.optimize_parameters(epoch=epoch)
+                model.optimize_parameters(epoch=continuous_epoch)
 
                 if step % cfg.log_freq == 0:
                     t_data = iter_start_time - iter_data_time
