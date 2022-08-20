@@ -1,0 +1,5 @@
+to test:
+
++experiment=hoechstgan_basic discriminator.type=joint dataset.max_size=250000 
++experiment=hoechstgan_composite generator.composites.0.train.schedule=sigmoid generator.composites.0.train.args.from_epoch=1 generator.composites.0.train.args.to_epoch=29
++experiment=hoechstgan_composite generator.composites.0.train.schedule=sigmoid generator.composites.0.train.args.from_epoch=8 generator.composites.0.train.args.to_epoch=12
