@@ -17,7 +17,7 @@ class Composite(ABC):
 @composite_factory.register_as("default")
 class TakeFirstComposite(Composite):
 
-    def __init__(self, /, **kwargs):
+    def __init__(self, cfg: DictConfig, /, **kwargs):
         pass
 
     def __call__(self, *inputs, epoch: float):
@@ -27,7 +27,11 @@ class TakeFirstComposite(Composite):
 @composite_factory.register_as("linear")
 class LinearComposite(Composite):
 
-    def __init__(self, /, from_epoch, to_epoch, **kwargs):
+    def __init__(self, cfg: DictConfig, /, *, from_epoch=None, to_epoch=None, **kwargs):
+        if from_epoch is None:
+            from_epoch = 0
+        if to_epoch is None:
+            to_epoch = cfg.num_epochs
         self.from_epoch = float(from_epoch)
         self.to_epoch = float(to_epoch)
 
@@ -46,7 +50,11 @@ class LinearComposite(Composite):
 @composite_factory.register_as("sigmoid")
 class SigmoidComposite(Composite):
 
-    def __init__(self, /, from_epoch, to_epoch, **kwargs):
+    def __init__(self, cfg: DictConfig, /, *, from_epoch=None, to_epoch=None, **kwargs):
+        if from_epoch is None:
+            from_epoch = 0
+        if to_epoch is None:
+            to_epoch = cfg.num_epochs
         self.from_epoch = float(from_epoch)
         self.to_epoch = float(to_epoch)
 

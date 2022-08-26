@@ -172,7 +172,7 @@ def define_G(cfg: DictConfig):
     composites = {
         (force_tuple(comp[cfg.phase]["from"]), comp["to"]):
             composite_factory[comp[cfg.phase].get("schedule", "default")](
-                **comp[cfg.phase].get("args", dict()))
+                cfg, **comp[cfg.phase].get("args", dict()))
         for comp in composites
     }
     reals = ["A", *cfg.dataset.outputs.keys()]
