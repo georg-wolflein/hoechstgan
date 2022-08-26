@@ -271,11 +271,16 @@ if __name__ == "__main__":
     parser.add_argument("--substitute",
                         action="store_true",
                         help="perform latent substition")
+    parser.add_argument("--gpus", type=str,
+                        help="comma-separated list of gpus to use",
+                        default=None)
     args = parser.parse_args()
     cfg, run = load_run_cfg(args.run)
     initialize(config_path="conf", version_base="1.2")
     test_cfg = compose("test_overrides.yaml")
     cfg = OmegaConf.merge(cfg, test_cfg)
+    if args.gpus:
+        cfg.gpus = [int(x) for x in args.gpus.split(",")]
     test_model(cfg, run,
                metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
                do_latent_substitution=args.substitute)
