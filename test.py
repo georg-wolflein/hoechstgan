@@ -66,6 +66,24 @@ def compute_mask_intensity_ratio(img, mask) -> float:
     return numerator / denominator if denominator != 0 else 0, numerator, denominator
 
 
+def get_mir_stats(real_X, fake_X, mask) -> dict:
+    mir_real, mir_real_num, mir_real_den = compute_mask_intensity_ratio(
+        real_X, mask)
+    mir_fake, mir_fake_num, mir_fake_den = compute_mask_intensity_ratio(
+        fake_X, mask)
+    mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
+
+    return {
+        f"real MIR": mir_real,
+        f"real MIR numerator": mir_real_num,
+        f"real MIR denominator": mir_real_den,
+        f"fake MIR": mir_fake,
+        f"fake MIR numerator": mir_fake_num,
+        f"fake MIR denominator": mir_fake_den,
+        f"relative MIR": mir_ratio
+    }
+
+
 def get_img(tensor):
     return (tensor.cpu().numpy().squeeze() + 1) / 2.
 
@@ -86,18 +104,42 @@ def compute_percent_tp_cells(img, mask):
     return zip(thresholds, num_cells_per_threshold / num_cells)
 
 
-def perform_test(data, model, cfg, latent_substitutions=None):
+def perform_test(data, model, cfg, latent_substitutions=None, compute_tp_thresholds=False):
     model.set_input(data)
     model.test()
 
     outputs = cfg.dataset.outputs
     real_outputs = {i: getattr(model, f"real_{i}") for i in outputs}
     fake_outputs = {i: getattr(model, f"fake_{i}") for i in outputs}
+    fake_outputs_sub = dict()
 
     if latent_substitutions:
         model.test(latent_substitutions=latent_substitutions)
-        fake_outputs_sub = {i: getattr(model, f"fake_{i}")
-                            for i in outputs}
+        fake_outputs_sub["latent"] = {i: getattr(model, f"fake_{i}")
+                                      for i in outputs}
+
+    do_input_substitutions = True
+    if do_input_substitutions:
+        key = "composite_B" if any(c["to"] == "composite_B"
+                                   for c in cfg.generator.composites) else "fake_B"
+        for mode in "zeros", "normal", "real", "other_real":
+            if mode == "zeros":
+                sub = torch.zeros_like(model.fake_B)
+            elif mode == "normal":
+                sub = torch.randn_like(model.fake_B)
+            elif mode == "real":
+                sub = model.real_B
+            elif mode == "other_real":
+                # Permute batch (akin to random shuffling, because dataset is already shuffled)
+                indices = torch.arange(model.real_B.shape[0]) + 1
+                indices = indices % model.real_B.shape[0]
+                sub = model.real_B[indices]
+            input_substitutions = {
+                key: sub
+            }
+            model.test(input_substitutions=input_substitutions)
+            fake_outputs_sub[f"input_{mode}"] = {i: getattr(model, f"fake_{i}")
+                                                 for i in outputs}
 
     for i, (json_path, real_A) in enumerate(zip(data["json_files"], model.real_A)):
         json_path = Path(json_path)
@@ -121,30 +163,27 @@ def perform_test(data, model, cfg, latent_substitutions=None):
             l_real = label(mask, connectivity=1)
             num_cells_real = l_real.max()
 
-            mir_real, mir_real_num, mir_real_den = compute_mask_intensity_ratio(
-                real_X, mask)
-            mir_fake, mir_fake_num, mir_fake_den = compute_mask_intensity_ratio(
-                fake_X, mask)
-            mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
-
             metrics.update({
                 f"{channel}+ cells": num_cells_real,
-                f"{channel} real MIR": mir_real,
-                f"{channel} real MIR numerator": mir_real_num,
-                f"{channel} real MIR denominator": mir_real_den,
-                f"{channel} fake MIR": mir_fake,
-                f"{channel} fake MIR numerator": mir_fake_num,
-                f"{channel} fake MIR denominator": mir_fake_den,
-                f"{channel} relative MIR": mir_ratio
+                **{f"{channel} {k}": v
+                   for k, v in get_mir_stats(real_X, fake_X, mask).items()}
             })
-            for X_name, X in {"real": real_X, "fake": fake_X}.items():
-                metrics.update({
-                    f"{channel}+ cells {X_name} TP @{threshold:.1f}": percent_identified
-                    for (threshold, percent_identified) in compute_percent_tp_cells(X, mask)
-                })
+
+            for sub_mode, sub_outputs in fake_outputs_sub.items():
+                sub_fake_X = get_img(sub_outputs[out][i])
+                metrics.update({f"sub_{sub_mode} {channel} {k}": v
+                                for k, v in get_mir_stats(real_X, sub_fake_X, mask).items()
+                                })
+            if compute_tp_thresholds:
+                for X_name, X in {"real": real_X, "fake": fake_X}.items():
+                    metrics.update({
+                        f"{channel}+ cells {X_name} TP @{threshold:.1f}": percent_identified
+                        for (threshold, percent_identified) in compute_percent_tp_cells(X, mask)
+                    })
             visuals.update({
                 f"fake_{out}": fake_X,
-                **({f"fake_{out}_sub": get_img(fake_outputs_sub[out][i])} if latent_substitutions else {}),
+                **({f"fake_{out}_sub_{sub_mode}": get_img(sub_outputs[out][i])
+                    for sub_mode, sub_outputs in fake_outputs_sub.items()}),
                 f"real_{out}": real_X,
                 f"mask_{out}": mask.astype(float)
             })
@@ -211,6 +250,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
         dataset_size = len(dataset)
         # Test set is ~150000, so we choose only 150000 samples
         dataset_size = min(dataset_size, 150000)
+        # dataset_size = 100
         res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
                                                       for data in dataset)
         res_generator = itertools.islice(res_generator, dataset_size)
@@ -268,7 +308,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("run", type=str, help="wandb run ID")
-    parser.add_argument("--substitute",
+    parser.add_argument("--latent",
                         action="store_true",
                         help="perform latent substition")
     parser.add_argument("--gpus", type=str,
@@ -283,4 +323,4 @@ if __name__ == "__main__":
         cfg.gpus = [int(x) for x in args.gpus.split(",")]
     test_model(cfg, run,
                metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
-               do_latent_substitution=args.substitute)
+               do_latent_substitution=args.latent)

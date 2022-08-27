@@ -348,6 +348,7 @@ class UnetGenerator(nn.Module):
                 dry_run: bool = False,
                 verbose: bool = None,
                 latent_substitutions: dict = {},
+                input_substitutions: dict = {},
                 real_inputs: dict = {},
                 epoch: float = None):
         if dry_run and verbose is None:
@@ -368,6 +369,11 @@ class UnetGenerator(nn.Module):
                     log(f"  Encoding {enc_from} -> {enc_to}")
                     if not dry_run:
                         output = outputs[enc_from]
+                    if enc_from in input_substitutions:
+                        log(f"    (using substituted {enc_from})")
+                        if not dry_run:
+                            output = input_substitutions[enc_from]
+                    if not dry_run:
                         latent = encoder(output)
                         if enc_to in latent_substitutions:
                             log(f"  Substituting latent code for {enc_to}")
