@@ -1,10 +1,12 @@
 
+from collections import defaultdict
+import shutil
 from omegaconf import DictConfig, ListConfig, OmegaConf
 import matplotlib.pyplot as plt
 import numpy as np
 from pathlib import Path
 import json
-from PIL import Image
+from PIL import Image, ImageColor
 import itertools
 from functools import partial
 from skimage.morphology import label
@@ -104,7 +106,7 @@ def compute_percent_tp_cells(img, mask):
     return zip(thresholds, num_cells_per_threshold / num_cells)
 
 
-def perform_test(data, model, cfg, latent_substitutions=None, compute_tp_thresholds=False):
+def perform_test(data, model, cfg, latent_substitutions=None, compute_tp_thresholds=False, do_input_substitution=False):
     model.set_input(data)
     model.test()
 
@@ -118,8 +120,7 @@ def perform_test(data, model, cfg, latent_substitutions=None, compute_tp_thresho
         fake_outputs_sub["latent"] = {i: getattr(model, f"fake_{i}")
                                       for i in outputs}
 
-    do_input_substitutions = True
-    if do_input_substitutions:
+    if do_input_substitution:
         key = "composite_B" if any(c["to"] == "composite_B"
                                    for c in cfg.generator.composites) else "fake_B"
         for mode in "zeros", "normal", "real", "other_real":
@@ -148,17 +149,24 @@ def perform_test(data, model, cfg, latent_substitutions=None, compute_tp_thresho
         with json_path.open("r") as f:
             meta = json.load(f)
 
+        def load_mask(channel):
+            mask_path = json_path.with_name(get_channel_file_from_metadata(
+                meta, channel=channel, mode="mask", mask_type="cells"))
+            mask = Image.open(mask_path).convert("L")
+            mask = np.array(mask)
+            mask = mask != 0
+            return mask
+
+        # Load Hoechst mask
+        visuals["mask_A"] = load_mask("Hoechst").astype(float)
+
         for out, out_cfg in outputs.items():
             real_X = get_img(real_outputs[out][i])
             fake_X = get_img(fake_outputs[out][i])
             channel = CHANNELS[out_cfg.props.channel]
 
             # Get mask
-            mask_path = json_path.with_name(get_channel_file_from_metadata(
-                meta, channel=channel, mode="mask", mask_type="cells"))
-            mask = Image.open(mask_path).convert("L")
-            mask = np.array(mask)
-            mask = mask != 0
+            mask = load_mask(channel)
 
             l_real = label(mask, connectivity=1)
             num_cells_real = l_real.max()
@@ -220,9 +228,10 @@ def get_fig(fig: plt.Figure) -> wandb.Image:
     return img
 
 
-def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 relative MIR", do_latent_substitution: bool = False):
+def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 relative MIR", do_latent_substitution: bool = False, do_input_substitution: bool = False, save_sample_patches: bool = False):
     summary_stats = dict()
-    update_wandb_stats = not do_latent_substitution  # only update stats if not sub
+    # Only update stats if not sub/samples
+    update_wandb_stats = not do_latent_substitution and not save_sample_patches
     # update_wandb_stats = False
     filename_suffix = "sub" if do_latent_substitution else ""
 
@@ -245,13 +254,13 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
     # Load model again in test mode
     model = setup_model(cfg, is_train=False, verbose=True)
 
-    for phase in ("train", "test"):
+    for phase in ("test", "train"):
         dataset = load_dataset(cfg, phase=phase)
         dataset_size = len(dataset)
         # Test set is ~150000, so we choose only 150000 samples
         dataset_size = min(dataset_size, 150000)
         # dataset_size = 1000
-        res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
+        res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions, do_input_substitution=do_input_substitution)
                                                       for data in dataset)
         res_generator = itertools.islice(res_generator, dataset_size)
         res = itertools.islice(res_generator, 30)
@@ -269,6 +278,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
         for row, r in enumerate(res):
             visuals = r["visuals"]
             metrics = r["metrics"]
+            metrics["row"] = row
             splot = partial(subplot, len(res), len(visuals) + 5)
             for col, (name, visual) in enumerate(visuals.items()):
                 splot(row, col)
@@ -276,15 +286,53 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
                 plt.title(name)
                 plt.axis("off")
             splot(row, col + 1)
-            for y, (k, v) in zip(np.linspace(.1, .9, len(metrics)), reversed(metrics.items())):
-                if "relative" in k or k == "file":
-                    plt.text(0., y, k)
-                    plt.text(1., y, f"{v:.3f}" if isinstance(
-                        v, float) else str(v))
+            relevant_metrics = {k: v
+                                for k, v in metrics.items() if
+                                "relative" in k or k in ("file", "row")}
+            for y, (k, v) in zip(np.linspace(.1, .9, len(relevant_metrics)), reversed(relevant_metrics.items())):
+                plt.text(0., y, k)
+                plt.text(1., y, f"{v:.3f}" if isinstance(
+                    v, float) else str(v))
             plt.axis("off")
-        plt.savefig(
-            OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_vis.png")
-        # run.summary["sample_vis"] = get_fig(fig)
+        if not save_sample_patches:
+            plt.savefig(
+                OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_vis.png")
+            # run.summary["sample_vis"] = get_fig(fig)
+
+        if save_sample_patches:
+            visuals = defaultdict(list)
+            metrics = defaultdict(list)
+            WHITE = "#ffffff"
+            RED = "#c61a09"
+            BLUE = "#0da2ff"
+            samples_out_dir = OUT_DIR / "samples" / \
+                f"{cfg.name}_{cfg.wandb_id}_{phase}"
+            shutil.rmtree(samples_out_dir, ignore_errors=True)
+            samples_out_dir.mkdir(parents=True, exist_ok=True)
+            for r in itertools.islice(res, samples):
+                for dk, dv in ("visuals", visuals), ("metrics", metrics):
+                    if dk == "visuals":
+                        mask_A = r[dk]["mask_A"]
+                        mask_B = r[dk]["mask_B"]
+                        mask_C = r[dk]["mask_C"]
+                        img = np.zeros((*mask_A.shape, 3), dtype=np.uint8)
+                        img[mask_A == 1] = ImageColor.getrgb(WHITE)
+                        img[mask_B == 1] = ImageColor.getrgb(BLUE)
+                        img[mask_C == 1] = ImageColor.getrgb(RED)
+                        r[dk]["cells"] = img
+                    for k, v in r[dk].items():
+                        dv[k].append(v)
+            for k, v in visuals.items():
+                for i, patch in enumerate(v):
+                    img = patch
+                    if img.dtype != np.uint8:
+                        img = (img * 255).astype(np.uint8)
+                    Image.fromarray(img).save(
+                        samples_out_dir / f"patch_{i:02d}_{k}.png")
+            df = pd.DataFrame(metrics)
+            df.to_csv(samples_out_dir / "metrics.csv")
+            plt.savefig(samples_out_dir / "vis.png")
+            return
 
         metrics = [r["metrics"]
                    for r in tqdm(itertools.chain(res, res_generator), total=dataset_size, desc=f"processing {phase} dataset")]
@@ -308,9 +356,14 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("run", type=str, help="wandb run ID")
-    parser.add_argument("--latent",
+    parser.add_argument("--latentsub",
                         action="store_true",
                         help="perform latent substition")
+    parser.add_argument("--inputsub",
+                        action="store_true",
+                        help="perform input substition")
+    parser.add_argument("--samples", action="store_true",
+                        help="save sample patches")
     parser.add_argument("--gpus", type=str,
                         help="comma-separated list of gpus to use",
                         default=None)
@@ -326,4 +379,6 @@ if __name__ == "__main__":
         print("Overriding dataset.num_threads to", cfg.dataset.num_threads)
     test_model(cfg, run,
                metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
-               do_latent_substitution=args.latent)
+               do_latent_substitution=args.latentsub,
+               do_input_substitution=args.inputsub,
+               save_sample_patches=args.samples)
