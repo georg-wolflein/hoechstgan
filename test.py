@@ -250,7 +250,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
         dataset_size = len(dataset)
         # Test set is ~150000, so we choose only 150000 samples
         dataset_size = min(dataset_size, 150000)
-        # dataset_size = 100
+        # dataset_size = 1000
         res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions)
                                                       for data in dataset)
         res_generator = itertools.islice(res_generator, dataset_size)
@@ -321,6 +321,9 @@ if __name__ == "__main__":
     cfg = OmegaConf.merge(cfg, test_cfg)
     if args.gpus:
         cfg.gpus = [int(x) for x in args.gpus.split(",")]
+        print("Overriding gpus to", cfg.gpus)
+        cfg.dataset.num_threads = len(cfg.gpus) * 2
+        print("Overriding dataset.num_threads to", cfg.dataset.num_threads)
     test_model(cfg, run,
                metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
                do_latent_substitution=args.latent)

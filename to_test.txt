@@ -1,9 +1,10 @@
 to test:
 
-+experiment=cy3 dataset.max_size=250000 norm=batch
-+experiment=cy5 dataset.max_size=250000 norm=batch
 +experiment=cy3 dataset.max_size=250000 norm=instance
 +experiment=cy5 dataset.max_size=250000 norm=instance
+
++experiment=cy3 dataset.max_size=250000 norm=batch
++experiment=cy5 dataset.max_size=250000 norm=batch
 
 - try larger discriminator (4 layers)
 +experiment=hoechstgan_basic discriminator.type=joint discriminator.layers=4 dataset.max_size=250000
