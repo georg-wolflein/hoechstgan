@@ -344,6 +344,8 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
 
         summary_stats.update(
             {f"{phase} mean {k}": v for (k, v) in df.mean().items()})
+        summary_stats.update(
+            {f"{phase} std {k}": v for (k, v) in df.std(ddof=0).items()})
     if update_wandb_stats:
         run.summary.update(summary_stats)
         run.update()
