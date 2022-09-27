@@ -7,21 +7,6 @@ from .base_model import BaseModel
 from . import networks
 
 
-def make_input_substitution(cfg: OmegaConf):
-    if not cfg.generator.substitute_input:
-        return None
-
-    num_epochs = cfg.learning_rate.n_epochs_inital + cfg.learning_rate.n_epochs_decay
-
-    def substitute_input(outputs: dict, real_inputs: dict, key: str, epoch: int):
-        out = outputs[key]
-        if key == "fake_B":
-            coef = epoch / (num_epochs-1)
-            return coef * out + (1.-coef) * real_inputs["real_B"]
-
-    return substitute_input
-
-
 class Generator:
 
     def __init__(self, gan):
