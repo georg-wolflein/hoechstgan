@@ -49,6 +49,7 @@ discriminator:
 generator:
   filters: 64
   dropout: true
+  dropout_eval_mode: "dropout" # how to apply dropout at test time: identity | average | dropout
   outputs: [fake_B]
   encoders:
     - from: real_A

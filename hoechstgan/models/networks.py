@@ -8,6 +8,7 @@ from torch.optim import lr_scheduler
 
 from ..util.module import PairedSerializedModuleDict
 from ..util.composites import composite_factory
+from ..util.dropout import Dropout
 
 
 ###############################################################################
@@ -133,6 +134,7 @@ def define_G(cfg: DictConfig):
     output_nc = cfg.dataset.outputs.B.num_channels
     filters = cfg.generator.filters
     use_dropout = cfg.generator.dropout
+    dropout_eval_mode = cfg.generator.dropout_eval_mode
     encoders = OmegaConf.to_container(cfg.generator.encoders, resolve=True)
     decoders = OmegaConf.to_container(cfg.generator.decoders, resolve=True)
     outputs = OmegaConf.to_container(cfg.generator.outputs, resolve=True)
@@ -142,7 +144,7 @@ def define_G(cfg: DictConfig):
 
     def make_net(factory, **kwargs):
         defaults = dict(input_nc=input_nc, output_nc=output_nc, num_downs=8, filters=filters,
-                        norm_layer=norm_layer, use_dropout=use_dropout)
+                        norm_layer=norm_layer, use_dropout=use_dropout, dropout_eval_mode=dropout_eval_mode)
         defaults.update(**kwargs)
         return factory(**defaults)
 
@@ -252,7 +254,7 @@ class GANLoss(nn.Module):
         return loss
 
 
-def make_unet_layers(UnetBlock, input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout):
+def make_unet_layers(UnetBlock, input_nc, output_nc, num_downs, ngf, norm_layer, use_dropout, dropout_eval_mode="dropout"):
     yield UnetBlock(output_nc, ngf, input_nc=input_nc, outermost=True,
                     norm_layer=norm_layer)  # outermost layer
     # gradually increase the number of filters from ngf to ngf * 8
@@ -265,14 +267,14 @@ def make_unet_layers(UnetBlock, input_nc, output_nc, num_downs, ngf, norm_layer,
     # intermediate layers with ngf * 8 filters
     for _ in range(num_downs - 5):
         yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
-                        norm_layer=norm_layer, use_dropout=use_dropout)
+                        norm_layer=norm_layer, use_dropout=use_dropout, dropout_eval_mode=dropout_eval_mode)
     yield UnetBlock(ngf * 8, ngf * 8, input_nc=None,
                     norm_layer=norm_layer, innermost=True)  # innermost layer
 
 
 class UnetEncoder(nn.ModuleList):
 
-    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, **kwargs):
         """Construct a Unet generator encoder
         Parameters:
             input_nc (int)  -- the number of channels in input images
@@ -283,7 +285,7 @@ class UnetEncoder(nn.ModuleList):
             norm_layer      -- normalization layer
         """
         super().__init__(list(make_unet_layers(UnetDown,
-                                               input_nc, output_nc, num_downs, filters, norm_layer, use_dropout)))
+                                               input_nc, output_nc, num_downs, filters, norm_layer, **kwargs)))
 
     def forward(self, x):
         intermediate_outputs = []
@@ -296,9 +298,9 @@ class UnetEncoder(nn.ModuleList):
 class UnetDecoder(nn.ModuleList):
     """See UnetEncoder."""
 
-    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, filters=64, norm_layer=nn.BatchNorm2d, use_dropout=False, dropout_eval_mode="dropout", **kwargs):
         super().__init__(reversed(list(make_unet_layers(UnetUp,
-                                                        input_nc, output_nc, num_downs, filters, norm_layer, use_dropout))))
+                                                        input_nc, output_nc, num_downs, filters, norm_layer, use_dropout, dropout_eval_mode, **kwargs))))
 
 
 # class UnetGenerator(nn.Module):
@@ -410,7 +412,7 @@ class UnetGenerator(nn.Module):
 
 class UnetDown(nn.Sequential):
 
-    def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, **kwargs):
         """Unet down block.
 
         Parameters:
@@ -420,7 +422,6 @@ class UnetDown(nn.Sequential):
             outermost (bool)    -- if this module is the outermost module
             innermost (bool)    -- if this module is the innermost module
             norm_layer          -- normalization layer
-            use_dropout (bool)  -- if use dropout layers.
         """
         self.outermost = outermost
         if type(norm_layer) == functools.partial:
@@ -446,7 +447,7 @@ class UnetDown(nn.Sequential):
 
 class UnetUp(nn.Sequential):
 
-    def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, outer_nc, inner_nc, input_nc=None, outermost=False, innermost=False, norm_layer=nn.BatchNorm2d, use_dropout=False, dropout_eval_mode="dropout", **kwargs):
         """Unet up block.
 
         Parameters:
@@ -457,6 +458,7 @@ class UnetUp(nn.Sequential):
             innermost (bool)    -- if this module is the innermost module
             norm_layer          -- normalization layer
             use_dropout (bool)  -- if use dropout layers.
+            dropout_eval_mode (str) -- if use_dropout, what mode to use for dropout during evaluation
         """
         self.outermost = outermost
         if type(norm_layer) == functools.partial:
@@ -485,7 +487,7 @@ class UnetUp(nn.Sequential):
             up = [uprelu, upconv, upnorm]
 
             if use_dropout:
-                up = up + [nn.Dropout(0.5)]
+                up = up + [Dropout(0.5, eval_mode=dropout_eval_mode)]
 
         super().__init__(*up)
 

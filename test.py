@@ -10,6 +10,7 @@ from PIL import Image, ImageColor
 import itertools
 from functools import partial
 from skimage.morphology import label
+from skimage.metrics import peak_signal_noise_ratio, structural_similarity
 import argparse
 from hydra import initialize, compose
 from tqdm import tqdm
@@ -27,14 +28,17 @@ OUT_DIR.mkdir(exist_ok=True)
 
 CHANNELS = {
     "Cy3": "CD3",
-    "Cy5": "CD8"
+    "Cy5": "CD8",
+    "CD3": "CD3",
+    "CD8": "CD8"
 }
 
 CFG_DEFAULTS = {
     "generator.composites": ListConfig([]),
     "loss.generator.coefficient": 1.,
     "loss.discriminator.coefficient": 1.,
-    "discriminator.type": "separate"
+    "discriminator.type": "separate",
+    "generator.dropout_eval_mode": "dropout"
 }
 
 
@@ -61,7 +65,7 @@ def load_run_cfg(run_id: str) -> DictConfig:
 
 
 def compute_mask_intensity_ratio(img, mask) -> float:
-    if mask.sum() == 0:
+    if (mask == 0).all():
         return np.nan, np.nan, np.nan
     numerator = img[mask].mean()
     denominator = img[~mask].mean()
@@ -73,7 +77,19 @@ def get_mir_stats(real_X, fake_X, mask) -> dict:
         real_X, mask)
     mir_fake, mir_fake_num, mir_fake_den = compute_mask_intensity_ratio(
         fake_X, mask)
-    mir_ratio = mir_fake / mir_real if mir_real > 0 else np.inf
+    mir_ratio = mir_fake / mir_real if mir_real != 0 else np.inf
+
+    fake_X_norm = fake_X + real_X.mean() - fake_X.mean()
+    mir_fake_norm, mir_fake_norm_num, mir_fake_norm_den = compute_mask_intensity_ratio(
+        fake_X_norm, mask)
+    mir_ratio_norm = mir_fake_norm / mir_real if mir_real != 0 else np.inf
+    # real_X_norm = real_X - real_X.mean()
+    # fake_X_norm = fake_X - fake_X.mean()
+    # mir_real_norm, mir_real_norm_num, mir_real_norm_den = compute_mask_intensity_ratio(
+    #     real_X_norm, mask)
+    # mir_fake_norm, mir_fake_norm_num, mir_fake_norm_den = compute_mask_intensity_ratio(
+    #     fake_X_norm, mask)
+    # mir_ratio_norm = mir_fake_norm / mir_real_norm if mir_real_norm != 0 else np.inf
 
     return {
         f"real MIR": mir_real,
@@ -82,7 +98,19 @@ def get_mir_stats(real_X, fake_X, mask) -> dict:
         f"fake MIR": mir_fake,
         f"fake MIR numerator": mir_fake_num,
         f"fake MIR denominator": mir_fake_den,
-        f"relative MIR": mir_ratio
+        f"fake MIR norm": mir_fake_norm,
+        f"fake MIR norm numerator": mir_fake_norm_num,
+        f"fake MIR norm denominator": mir_fake_norm_den,
+        f"relative MIR": mir_ratio,
+        f"relative MIR norm": mir_ratio_norm,
+        f"log relative MIR": np.log(mir_ratio),
+        f"log relative MIR norm": np.log(mir_ratio_norm),
+        f"real fake PSNR": peak_signal_noise_ratio(real_X, fake_X, data_range=1.),
+        f"real fake SSIM": structural_similarity(real_X, fake_X, data_range=1.),
+        f"real mask PSNR": peak_signal_noise_ratio(mask, real_X, data_range=1.),
+        f"real mask SSIM": structural_similarity(mask, real_X, data_range=1.),
+        f"fake mask PSNR": peak_signal_noise_ratio(mask, fake_X, data_range=1.),
+        f"fake mask SSIM": structural_similarity(mask, fake_X, data_range=1.)
     }
 
 
@@ -228,12 +256,24 @@ def get_fig(fig: plt.Figure) -> wandb.Image:
     return img
 
 
-def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 relative MIR", do_latent_substitution: bool = False, do_input_substitution: bool = False, save_sample_patches: bool = False):
+def test_model(
+    cfg: DictConfig,
+    run: wandb.wandb_sdk.wandb_run.Run,
+    metric="CD3 relative MIR",
+    do_latent_substitution: bool = False,
+    do_input_substitution: bool = False,
+    save_sample_patches: bool = False,
+    max_dataset_size: int = 150000,
+    filename_suffix: str = None,
+    update_wandb_stats: bool = None
+):
     summary_stats = dict()
     # Only update stats if not sub/samples
-    update_wandb_stats = not do_latent_substitution and not save_sample_patches
+    if update_wandb_stats is None:
+        update_wandb_stats = not do_latent_substitution and not save_sample_patches
     # update_wandb_stats = False
-    filename_suffix = "sub" if do_latent_substitution else ""
+    if filename_suffix is None:
+        filename_suffix = "sub" if do_latent_substitution else ""
 
     # Load model in train mode to gather some stats
     model = setup_model(cfg, is_train=True, verbose=False, gpus=[])
@@ -258,7 +298,7 @@ def test_model(cfg: DictConfig, run: wandb.wandb_sdk.wandb_run.Run, metric="CD3 
         dataset = load_dataset(cfg, phase=phase)
         dataset_size = len(dataset)
         # Test set is ~150000, so we choose only 150000 samples
-        dataset_size = min(dataset_size, 150000)
+        dataset_size = min(dataset_size, max_dataset_size)
         # dataset_size = 1000
         res_generator = itertools.chain.from_iterable(perform_test(data, model=model, cfg=cfg, latent_substitutions=latent_substitutions, do_input_substitution=do_input_substitution)
                                                       for data in dataset)
@@ -366,9 +406,22 @@ if __name__ == "__main__":
                         help="perform input substition")
     parser.add_argument("--samples", action="store_true",
                         help="save sample patches")
+    parser.add_argument("--size", type=int, default=150000,
+                        help="max dataset size")
     parser.add_argument("--gpus", type=str,
                         help="comma-separated list of gpus to use",
                         default=None)
+    parser.add_argument("--dropout", action="store_true",
+                        help="override to force dropout", dest="dropout", default=None)
+    parser.add_argument("--no-dropout", action="store_false",
+                        help="override to force no dropout", dest="dropout")
+    parser.add_argument("--no-update", action="store_false",
+                        help="don't update wandb stats", dest="update_wandb_stats")
+    parser.add_argument("--dropout-eval-mode", type=str,
+                        help="override dropout eval mode", choices=["identity", "dropout", "average"], default=None, dest="dropout_eval_mode")
+    parser.add_argument("--suffix", type=str, default=None,
+                        help="suffix for output files")
+    parser.set_defaults(update_wandb_stats=None, dropout=None)
     args = parser.parse_args()
     cfg, run = load_run_cfg(args.run)
     initialize(config_path="conf", version_base="1.2")
@@ -379,8 +432,17 @@ if __name__ == "__main__":
         print("Overriding gpus to", cfg.gpus)
         cfg.dataset.num_threads = len(cfg.gpus) * 2
         print("Overriding dataset.num_threads to", cfg.dataset.num_threads)
+    if args.dropout is not None:
+        print("Overriding dropout to", args.dropout)
+        cfg.generator.dropout = args.dropout
+    if args.dropout_eval_mode is not None:
+        print("Overriding dropout_eval_mode to", args.dropout_eval_mode)
+        cfg.generator.dropout_eval_mode = args.dropout_eval_mode
     test_model(cfg, run,
                metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
                do_latent_substitution=args.latentsub,
                do_input_substitution=args.inputsub,
-               save_sample_patches=args.samples)
+               save_sample_patches=args.samples,
+               max_dataset_size=args.size,
+               update_wandb_stats=args.update_wandb_stats,
+               filename_suffix=args.suffix)
