@@ -1,10 +1,26 @@
 HoechstGAN
 ==========
 
-This repository contains the code for the paper *HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial
-Networks*.
+This repository contains the official code for the paper:
+
+> [**HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial
+Networks**]()  
+> Georg Wölflein, In Hwa Um, David J. Harrison and Ognjen Arandjelović  
+> _IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)_, Jan 2023.
 
 ![](img/hoechstgan_notex.svg)
+
+If you find this code useful, please consider citing:
+```bibtex
+@inproceedings{hoechstgan,
+    title     = {HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial
+Networks},
+    author    = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen}
+    booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+    month     = {January},
+    year      = {2023},
+}
+```
 
 ## Installing
 We provide a `Dockerfile` as well as a `docker-compose.yml` file that builds the Docker container and mounts the code (i.e. this repository) as a volume.
