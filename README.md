@@ -15,7 +15,7 @@ If you find this code useful, please consider citing:
 @inproceedings{hoechstgan,
     title     = {HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial
 Networks},
-    author    = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen}
+    author    = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen},
     booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
     month     = {January},
     year      = {2023},
