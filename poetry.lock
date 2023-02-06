@@ -90,6 +90,17 @@ python-versions = ">=3.7"
 colorama = {version = "*", markers = "platform_system == \"Windows\""}
 
 [[package]]
+name = "cmake"
+version = "3.25.2"
+description = "CMake is an open-source, cross-platform family of tools designed to build, test and package software"
+category = "dev"
+optional = false
+python-versions = "*"
+
+[package.extras]
+test = ["codecov (>=2.0.5)", "coverage (>=4.2)", "flake8 (>=3.0.4)", "path.py (>=11.5.0)", "pytest (>=3.0.3)", "pytest-cov (>=2.4.0)", "pytest-runner (>=2.9)", "pytest-virtualenv (>=1.7.0)", "scikit-build (>=0.10.0)", "setuptools (>=28.0.0)", "virtualenv (>=15.0.3)", "wheel (<0.38)"]
+
+[[package]]
 name = "colorama"
 version = "0.4.4"
 description = "Cross-platform colored terminal text."
@@ -634,6 +645,19 @@ optional = false
 python-versions = ">=3.6"
 
 [[package]]
+name = "pylibczirw"
+version = "3.3.0"
+description = "A python wrapper around the libCZI C++ library with reading and writing functionality."
+category = "dev"
+optional = false
+python-versions = ">=3.7,<4"
+
+[package.dependencies]
+cmake = "*"
+numpy = "*"
+xmltodict = "*"
+
+[[package]]
 name = "pyparsing"
 version = "3.0.9"
 description = "pyparsing module - Classes and methods to define and execute parsing grammars"
@@ -774,6 +798,24 @@ python-versions = ">=3.8,<3.11"
 
 [package.dependencies]
 numpy = ">=1.17.3,<1.25.0"
+
+[[package]]
+name = "seaborn"
+version = "0.12.2"
+description = "Statistical data visualization"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+matplotlib = ">=3.1,<3.6.1 || >3.6.1"
+numpy = ">=1.17,<1.24.0 || >1.24.0"
+pandas = ">=0.25"
+
+[package.extras]
+dev = ["pytest", "pytest-cov", "pytest-xdist", "flake8", "mypy", "pandas-stubs", "pre-commit", "flit"]
+docs = ["numpydoc", "nbconvert", "ipykernel", "sphinx-copybutton", "sphinx-issues", "sphinx-design", "pyyaml", "pydata_sphinx_theme (==0.10.0rc2)"]
+stats = ["scipy (>=1.3)", "statsmodels (>=0.10)"]
 
 [[package]]
 name = "sentry-sdk"
@@ -976,6 +1018,22 @@ python-versions = ">=3.7"
 test = ["pre-commit", "pytest"]
 
 [[package]]
+name = "tueplots"
+version = "0.0.6"
+description = "Scientific plotting made easy"
+category = "dev"
+optional = false
+python-versions = ">=3.7"
+
+[package.dependencies]
+matplotlib = "*"
+numpy = "*"
+
+[package.extras]
+ci = ["tox"]
+examples = ["jupyter"]
+
+[[package]]
 name = "typing-extensions"
 version = "4.2.0"
 description = "Backported and Experimental Type Hints for Python 3.7+"
@@ -1048,10 +1106,18 @@ python-versions = ">=3.5"
 [package.extras]
 dev = ["pytest (>=4.6.2)", "black (>=19.3b0)"]
 
+[[package]]
+name = "xmltodict"
+version = "0.13.0"
+description = "Makes working with XML feel like you are working with JSON"
+category = "dev"
+optional = false
+python-versions = ">=3.4"
+
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.9,<3.11"
-content-hash = "7258a0a79c508f9cca6cbc084021fd39fc1e8daf571c091c36e679c2e817e8c0"
+content-hash = "e66ed34ab4ff3bc8697ac96d97a0c0fc5e1436e32f24d9d2d677fb45b3e401b7"
 
 [metadata.files]
 antlr4-python3-runtime = [
@@ -1136,6 +1202,25 @@ charset-normalizer = [
 click = [
     {file = "click-8.1.3-py3-none-any.whl", hash = "sha256:bb4d8133cb15a609f44e8213d9b391b0809795062913b383c62be0ee95b1db48"},
     {file = "click-8.1.3.tar.gz", hash = "sha256:7682dc8afb30297001674575ea00d1814d808d6a36af415a82bd481d37ba7b8e"},
+]
+cmake = [
+    {file = "cmake-3.25.2-py2.py3-none-macosx_10_10_universal2.macosx_10_10_x86_64.macosx_11_0_arm64.macosx_11_0_universal2.whl", hash = "sha256:962224cfb988ce9c9f3223de9cea68cd3a9d7c0f251866aee5db4620bed2ef73"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_12_i686.manylinux2010_i686.whl", hash = "sha256:42053bbaf7f77a13f713acd2cc6d724a2899b00a8f6042c0c80c9581f1ad9fde"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:a6d849fd0316a0bfa29b44752de8f30ea798771fea6a06d9f1cc5799910f10bf"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:c94571e1225e54e9444f8e8c47987932194fa4ab45ce96dc4de4fe5dfcc89afa"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_17_i686.manylinux2014_i686.whl", hash = "sha256:715ef82e81b48db3e4c7744614c15ff361d53f6987fd70b1b66b0880595f2e2c"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_17_ppc64le.manylinux2014_ppc64le.whl", hash = "sha256:679900ad25bfbb83fc5f7ed8885711d68e334bcde51011f237520b4268b4d900"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:a550a4d16d89fd78e48bacb97eea906486625fe8a8eac8d4607ccfd89a00372a"},
+    {file = "cmake-3.25.2-py2.py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:f9587645cea5298d5eb20649f58a83cc53c9efa7d57b0716449a39f366a74986"},
+    {file = "cmake-3.25.2-py2.py3-none-musllinux_1_1_aarch64.whl", hash = "sha256:27462531ffcd213397012cce341a7ff2b647d4f57a153a23f1a054805384ca05"},
+    {file = "cmake-3.25.2-py2.py3-none-musllinux_1_1_i686.whl", hash = "sha256:3bab3f5a60bd5843b07b83df97368983c59e2ab6b09ab08a80e608e9a37a6a09"},
+    {file = "cmake-3.25.2-py2.py3-none-musllinux_1_1_ppc64le.whl", hash = "sha256:faf8eb7e38a3167c1d502f6b6355717b645400f9c48947e9aab992f52d52df68"},
+    {file = "cmake-3.25.2-py2.py3-none-musllinux_1_1_s390x.whl", hash = "sha256:ef3b68c6096388fd4b139a6e4da5dd25e8fe8786b980375fe70914b81bac7f77"},
+    {file = "cmake-3.25.2-py2.py3-none-musllinux_1_1_x86_64.whl", hash = "sha256:48d9a496eb1b1da375b98753009f3c69a59a207e61ecdb13d2bf06e33491dad3"},
+    {file = "cmake-3.25.2-py2.py3-none-win32.whl", hash = "sha256:36407f07f6241258fbe05c937304f52a9a8291fcc8e709c2fa1970632dc27aa3"},
+    {file = "cmake-3.25.2-py2.py3-none-win_amd64.whl", hash = "sha256:e77f856b09f3246d22e4c99458678f0e3d094a73903643bbc422fbc92b77e574"},
+    {file = "cmake-3.25.2-py2.py3-none-win_arm64.whl", hash = "sha256:814800cf5a1f5a32cb7af659f830e8f810692929bdf5c9a30e5c263b3d16af7c"},
+    {file = "cmake-3.25.2.tar.gz", hash = "sha256:bcf9f0369743278ec26961542b31ed1610e6f4cfc20c00a3f1c61985abb3b0d2"},
 ]
 colorama = [
     {file = "colorama-0.4.4-py2.py3-none-any.whl", hash = "sha256:9f47eda37229f68eee03b24b9748937c7dc3868f906e8ba69fbcbdd3bc5dc3e2"},
@@ -1528,6 +1613,17 @@ pygments = [
     {file = "Pygments-2.12.0-py3-none-any.whl", hash = "sha256:dc9c10fb40944260f6ed4c688ece0cd2048414940f1cea51b8b226318411c519"},
     {file = "Pygments-2.12.0.tar.gz", hash = "sha256:5eb116118f9612ff1ee89ac96437bb6b49e8f04d8a13b514ba26f620208e26eb"},
 ]
+pylibczirw = [
+    {file = "pylibCZIrw-3.3.0-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:e2dc57ed251ce6bd724136a0b7f1064125d9fbb45a3b3ca4a9afa9ce44ec924e"},
+    {file = "pylibCZIrw-3.3.0-cp310-cp310-win_amd64.whl", hash = "sha256:280c0dbb286bf240ff96b9c60f01f796bf42d641029a2e3bf7212945b71e1434"},
+    {file = "pylibCZIrw-3.3.0-cp37-cp37m-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1231382a3fc1d9a59fca01af3bf81adbf6fbf0e680ddc576751ddd5aea218690"},
+    {file = "pylibCZIrw-3.3.0-cp37-cp37m-win_amd64.whl", hash = "sha256:5a7dabc53faa5dd8f1264ca5f0ecd6ed55fd981b9f1b6994ff4dc18eb85223b2"},
+    {file = "pylibCZIrw-3.3.0-cp38-cp38-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:62a794b6ba7663add5606f9f5e83b4a323da76d3f93a255304f26eace4e0d966"},
+    {file = "pylibCZIrw-3.3.0-cp38-cp38-win_amd64.whl", hash = "sha256:7071855ad9418de5386b0bc2bed7d0e50675b89c6cc9666279642ffe445f249f"},
+    {file = "pylibCZIrw-3.3.0-cp39-cp39-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:ed13005ea01e68ab89cbd5b7ca8193fa3737e76556478734794910e8edb0dff7"},
+    {file = "pylibCZIrw-3.3.0-cp39-cp39-win_amd64.whl", hash = "sha256:85d64216eb453def3bded7414270b3546c5f068acdd74fc7be530b5d2818d380"},
+    {file = "pylibCZIrw-3.3.0.tar.gz", hash = "sha256:f41c4bc8fdc9715b96d556942e2ab9ad39493c65b73f6b2e84a058978bd30898"},
+]
 pyparsing = [
     {file = "pyparsing-3.0.9-py3-none-any.whl", hash = "sha256:5026bae9a10eeaefb61dab2f09052b9f4307d44aee4eda64b309723d8d206bbc"},
     {file = "pyparsing-3.0.9.tar.gz", hash = "sha256:2b020ecf7d21b687f219b71ecad3631f644a47f01403fa1d1036b0c6416d70fb"},
@@ -1596,6 +1692,13 @@ pyyaml = [
     {file = "PyYAML-6.0-cp310-cp310-manylinux_2_5_x86_64.manylinux1_x86_64.manylinux_2_12_x86_64.manylinux2010_x86_64.whl", hash = "sha256:f84fbc98b019fef2ee9a1cb3ce93e3187a6df0b2538a651bfb890254ba9f90b5"},
     {file = "PyYAML-6.0-cp310-cp310-win32.whl", hash = "sha256:2cd5df3de48857ed0544b34e2d40e9fac445930039f3cfe4bcc592a1f836d513"},
     {file = "PyYAML-6.0-cp310-cp310-win_amd64.whl", hash = "sha256:daf496c58a8c52083df09b80c860005194014c3698698d1a57cbcfa182142a3a"},
+    {file = "PyYAML-6.0-cp311-cp311-macosx_10_9_x86_64.whl", hash = "sha256:d4b0ba9512519522b118090257be113b9468d804b19d63c71dbcf4a48fa32358"},
+    {file = "PyYAML-6.0-cp311-cp311-macosx_11_0_arm64.whl", hash = "sha256:81957921f441d50af23654aa6c5e5eaf9b06aba7f0a19c18a538dc7ef291c5a1"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:afa17f5bc4d1b10afd4466fd3a44dc0e245382deca5b3c353d8b757f9e3ecb8d"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:dbad0e9d368bb989f4515da330b88a057617d16b6a8245084f1b05400f24609f"},
+    {file = "PyYAML-6.0-cp311-cp311-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:432557aa2c09802be39460360ddffd48156e30721f5e8d917f01d31694216782"},
+    {file = "PyYAML-6.0-cp311-cp311-win32.whl", hash = "sha256:bfaef573a63ba8923503d27530362590ff4f576c626d86a9fed95822a8255fd7"},
+    {file = "PyYAML-6.0-cp311-cp311-win_amd64.whl", hash = "sha256:01b45c0191e6d66c470b6cf1b9531a771a83c1c4208272ead47a3ae4f2f603bf"},
     {file = "PyYAML-6.0-cp36-cp36m-macosx_10_9_x86_64.whl", hash = "sha256:897b80890765f037df3403d22bab41627ca8811ae55e9a722fd0392850ec4d86"},
     {file = "PyYAML-6.0-cp36-cp36m-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:50602afada6d6cbfad699b0c7bb50d5ccffa7e46a3d738092afddc1f9758427f"},
     {file = "PyYAML-6.0-cp36-cp36m-manylinux_2_17_s390x.manylinux2014_s390x.whl", hash = "sha256:48c346915c114f5fdb3ead70312bd042a953a8ce5c7106d5bfb1a5254e47da92"},
@@ -1758,6 +1861,10 @@ scipy = [
     {file = "scipy-1.8.1-cp39-cp39-win32.whl", hash = "sha256:1166514aa3bbf04cb5941027c6e294a000bba0cf00f5cdac6c77f2dad479b434"},
     {file = "scipy-1.8.1-cp39-cp39-win_amd64.whl", hash = "sha256:9dd4012ac599a1e7eb63c114d1eee1bcfc6dc75a29b589ff0ad0bb3d9412034f"},
     {file = "scipy-1.8.1.tar.gz", hash = "sha256:9e3fb1b0e896f14a85aa9a28d5f755daaeeb54c897b746df7a55ccb02b340f33"},
+]
+seaborn = [
+    {file = "seaborn-0.12.2-py3-none-any.whl", hash = "sha256:ebf15355a4dba46037dfd65b7350f014ceb1f13c05e814eda2c9f5fd731afc08"},
+    {file = "seaborn-0.12.2.tar.gz", hash = "sha256:374645f36509d0dcab895cba5b47daf0586f77bfe3b36c97c607db7da5be0139"},
 ]
 sentry-sdk = [
     {file = "sentry-sdk-1.5.12.tar.gz", hash = "sha256:259535ba66933eacf85ab46524188c84dcb4c39f40348455ce15e2c0aca68863"},
@@ -1965,6 +2072,9 @@ traitlets = [
     {file = "traitlets-5.2.2.post1-py3-none-any.whl", hash = "sha256:1530d04badddc6a73d50b7ee34667d4b96914da352109117b4280cb56523a51b"},
     {file = "traitlets-5.2.2.post1.tar.gz", hash = "sha256:74803a1baa59af70f023671d86d5c7a834c931186df26d50d362ee6a1ff021fd"},
 ]
+tueplots = [
+    {file = "tueplots-0.0.6-py3-none-any.whl", hash = "sha256:2d8de8e90de49baa172f59af5f8b71f0d9c002e44c1b46176df0834c8884780a"},
+]
 typing-extensions = [
     {file = "typing_extensions-4.2.0-py3-none-any.whl", hash = "sha256:6657594ee297170d19f67d55c05852a874e7eb634f4f753dbd667855e07c1708"},
     {file = "typing_extensions-4.2.0.tar.gz", hash = "sha256:f1c24655a0da0d1b67f07e17a5e6b2a105894e6824b92096378bb3668ef02376"},
@@ -1984,4 +2094,8 @@ wcwidth = [
 win32-setctime = [
     {file = "win32_setctime-1.1.0-py3-none-any.whl", hash = "sha256:231db239e959c2fe7eb1d7dc129f11172354f98361c4fa2d6d2d7e278baa8aad"},
     {file = "win32_setctime-1.1.0.tar.gz", hash = "sha256:15cf5750465118d6929ae4de4eb46e8edae9a5634350c01ba582df868e932cb2"},
+]
+xmltodict = [
+    {file = "xmltodict-0.13.0-py2.py3-none-any.whl", hash = "sha256:aa89e8fd76320154a40d19a0df04a4695fb9dc5ba977cbb68ab3e4eb225e7852"},
+    {file = "xmltodict-0.13.0.tar.gz", hash = "sha256:341595a488e3e01a85a9d8911d8912fd922ede5fecc4dce437eb4b6c8d037e56"},
 ]
