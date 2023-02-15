@@ -15,15 +15,29 @@ If you find this code useful, please consider citing:
 
 ```bibtex
 @inproceedings{hoechstgan,
-    title     = {HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial
-Networks},
-    author    = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen},
-    booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
-    month     = {January},
-    year      = {2023},
-    pages     = {4997--5007}
+  title = {HoechstGAN: Virtual Lymphocyte Staining Using Generative Adversarial Networks},
+  author = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen},
+  booktitle = {Proceedings of the IEEE/CVF Winter Conference on Applications of Computer Vision (WACV)},
+  month = {January},
+  year = {2023},
+  pages = {4997--5007}
+}
+
+@article{hoechstgan_dataset,
+  title = {Whole-Slide Images and Patches of Clear Cell Renal Cell Carcinoma Tissue Sections Counterstained with {Hoechst} 33342, {CD3}, and {CD8} Using Multiple Immunofluorescence},
+  author = {W\"{o}lflein, Georg and Um, In Hwa and Harrison, David J and Arandjelovi\'{c}, Ognjen},
+  journal = {Data},
+  volume = {8},
+  year = {2023},
+  month = {February},
+  number = {2},
+  article-number = {40}
 }
 ```
+
+## Data
+
+We have made our [dataset](https://www.ebi.ac.uk/biostudies/bioimages/studies/S-BIAD605) publicly available on _BioImage Archive_, alongside an accompanying [article](https://www.mdpi.com/2306-5729/8/2/40) in the _Data_ journal that contains a detailed description of the dataset.
 
 ## Installing
 
