@@ -265,8 +265,19 @@ def test_model(
     save_sample_patches: bool = False,
     max_dataset_size: int = 150000,
     filename_suffix: str = None,
-    update_wandb_stats: bool = None
+    update_wandb_stats: bool = None,
+    epoch: str = None
 ):
+    # Determine epoch
+    if epoch is not None:
+        if epoch == "latest":
+            cfg.load_checkpoint = "latest"
+        else:
+            # Assume it's an int
+            epoch = int(args.epoch)
+            cfg.initial_epoch = epoch
+            cfg.load_checkpoint = "epoch"
+
     summary_stats = dict()
     # Only update stats if not sub/samples
     if update_wandb_stats is None:
@@ -346,7 +357,7 @@ def test_model(
             RED = "#c61a09"
             BLUE = "#0da2ff"
             samples_out_dir = OUT_DIR / "samples" / \
-                f"{cfg.name}_{cfg.wandb_id}_{phase}"
+                f"{cfg.name}_{cfg.wandb_id}_{phase}_{epoch}"
             shutil.rmtree(samples_out_dir, ignore_errors=True)
             samples_out_dir.mkdir(parents=True, exist_ok=True)
             for r in itertools.islice(res, samples):
@@ -380,7 +391,7 @@ def test_model(
         df = df.replace([np.inf, -np.inf], np.nan)
         print(df.describe())
         df.to_csv(
-            OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{phase}_{filename_suffix}_metrics.csv", index=False)
+            OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{epoch}_{phase}_{filename_suffix}_metrics.csv", index=False)
 
         summary_stats.update(
             {f"{phase} mean {k}": v for (k, v) in df.mean().items()})
@@ -392,7 +403,7 @@ def test_model(
     df_stats = pd.DataFrame(summary_stats.items(),
                             columns=["key", "value"])
     df_stats.to_csv(
-        OUT_DIR / f"{cfg.name}_{cfg.wandb_id}__{filename_suffix}_stats.csv", index=False)
+        OUT_DIR / f"{cfg.name}_{cfg.wandb_id}_{epoch}__{filename_suffix}_stats.csv", index=False)
 
 
 if __name__ == "__main__":
@@ -421,6 +432,8 @@ if __name__ == "__main__":
                         help="override dropout eval mode", choices=["identity", "dropout", "average"], default=None, dest="dropout_eval_mode")
     parser.add_argument("--suffix", type=str, default=None,
                         help="suffix for output files")
+    parser.add_argument("--epoch", type=str, default=None,
+                        help="epoch to evaluate")
     parser.set_defaults(update_wandb_stats=None, dropout=None)
     args = parser.parse_args()
     cfg, run = load_run_cfg(args.run)
@@ -445,4 +458,5 @@ if __name__ == "__main__":
                save_sample_patches=args.samples,
                max_dataset_size=args.size,
                update_wandb_stats=args.update_wandb_stats,
-               filename_suffix=args.suffix)
+               filename_suffix=args.suffix,
+               epoch=args.epoch)
