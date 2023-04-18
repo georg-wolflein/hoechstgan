@@ -461,16 +461,17 @@ if __name__ == "__main__":
                        do_input_substitution=args.inputsub,
                        save_sample_patches=args.samples,
                        max_dataset_size=args.size,
-                       update_wandb_stats=args.update_wandb_stats,
                        filename_suffix=args.suffix)
 
     # Run test
     if args.epoch is not None and args.epoch.startswith("<"):
         # Run test for all epochs up to the specified one
-        print("Running test for all epochs up to", args.epoch)
         until_epoch = int(args.epoch[1:])
+        print(f"Running test for all epochs up to {until_epoch}")
         for epoch in range(until_epoch):
-            run_test(epoch=epoch)
+            run_test(epoch=epoch,
+                     update_wandb_stats=args.update_wandb_stats and epoch == until_epoch - 1)
     else:
         # Run test for the specified epoch
-        run_test(epoch=args.epoch)
+        run_test(epoch=args.epoch,
+                 update_wandb_stats=args.update_wandb_stats)
