@@ -274,9 +274,10 @@ def test_model(
             cfg.load_checkpoint = "latest"
         else:
             # Assume it's an int
-            epoch = int(args.epoch)
+            epoch = int(epoch)
             cfg.initial_epoch = epoch
             cfg.load_checkpoint = "epoch"
+    print("Running test for epoch", epoch)
 
     summary_stats = dict()
     # Only update stats if not sub/samples
@@ -466,6 +467,7 @@ if __name__ == "__main__":
     # Run test
     if args.epoch is not None and args.epoch.startswith("<"):
         # Run test for all epochs up to the specified one
+        print("Running test for all epochs up to", args.epoch)
         until_epoch = int(args.epoch[1:])
         for epoch in range(until_epoch):
             run_test(epoch=epoch)
