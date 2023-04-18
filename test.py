@@ -451,12 +451,24 @@ if __name__ == "__main__":
     if args.dropout_eval_mode is not None:
         print("Overriding dropout_eval_mode to", args.dropout_eval_mode)
         cfg.generator.dropout_eval_mode = args.dropout_eval_mode
-    test_model(cfg, run,
-               metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
-               do_latent_substitution=args.latentsub,
-               do_input_substitution=args.inputsub,
-               save_sample_patches=args.samples,
-               max_dataset_size=args.size,
-               update_wandb_stats=args.update_wandb_stats,
-               filename_suffix=args.suffix,
-               epoch=args.epoch)
+
+    # Construct function to run test
+    run_test = partial(test_model,
+                       cfg, run,
+                       metric=f"{CHANNELS[cfg.dataset.outputs.B.props.channel]} relative MIR",
+                       do_latent_substitution=args.latentsub,
+                       do_input_substitution=args.inputsub,
+                       save_sample_patches=args.samples,
+                       max_dataset_size=args.size,
+                       update_wandb_stats=args.update_wandb_stats,
+                       filename_suffix=args.suffix)
+
+    # Run test
+    if args.epoch is not None and args.epoch.startswith("<"):
+        # Run test for all epochs up to the specified one
+        until_epoch = int(args.epoch[1:])
+        for epoch in range(until_epoch):
+            run_test(epoch=epoch)
+    else:
+        # Run test for the specified epoch
+        run_test(epoch=args.epoch)
