@@ -65,7 +65,7 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
     print(f"Training a client on device {cfg.gpus}")
 
     # Load global parameters into client model
-    model.load_state_dict(global_params)
+    model.load_state_dict(global_params.copy())
     print(f"Loaded global parameters into client model on device {cfg.gpus}")
 
     # Train each client
