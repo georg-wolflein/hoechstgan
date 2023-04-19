@@ -224,11 +224,11 @@ class BaseModel(ABC):
             for name in self.model_names if isinstance(name, str)
         }
 
-    def load_state_dict(self, state_dict):
+    def load_state_dict(self, state_dict, *args, **kwargs):
         for name in self.model_names:
             if isinstance(name, str):
                 getattr(self, "net" +
-                        name).load_state_dict(state_dict["net" + name])
+                        name).load_state_dict(state_dict["net" + name], *args, **kwargs)
 
     def share_memory(self, *args, **kwargs):
         for name in self.model_names:

@@ -3,6 +3,7 @@ from torch import optim, nn, multiprocessing as mp
 from torchvision import datasets, transforms
 from torch.nn import functional as F
 import copy
+import time
 
 
 mp.set_start_method("spawn", force=True)
@@ -77,6 +78,7 @@ def train_epoch(epoch, model, optimizer, loader, global_params, queue, device):
                                                                                   loader.dataset),
                                                                               100. * batch_idx / len(loader), loss.data.item()))
     queue.put(share_state_dict(model.state_dict()))
+    time.sleep(10)
 
 
 if __name__ == "__main__":
@@ -99,9 +101,9 @@ if __name__ == "__main__":
     p1.start()
     p2.start()
 
-    p1.join()
-    p2.join()
+    # p1.join()
+    # p2.join()
 
     print("Processes done")
-    while queue.qsize() > 0:
+    for i in range(2):
         print(queue.get())

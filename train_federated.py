@@ -75,6 +75,26 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
         print(f"Trained {i}th client on device {cfg.gpus}")
 
 
+def worker(input_queue, output_queue, model, model_cfg, model_logger):
+    print(f"Starting worker on {model_cfg.gpus}")
+    while True:
+        data = input_queue.get()
+        if data is None:
+            print(f"Stopping worker on {model_cfg.gpus}")
+            return
+        epoch, client_dataset, global_params = data
+
+        print(
+            f"Loading global parameters into client model on device {model_cfg.gpus}")
+        model.load_state_dict(global_params, map_location=model_cfg.gpus)
+
+        print(f"Training client on device {model_cfg.gpus}")
+        train_one_epoch(model_cfg, model, client_dataset, epoch, model_logger)
+
+        print(f"Sending parameters from client on device {model_cfg.gpus}")
+        output_queue.put(model.get_state_dict())
+
+
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
 def train(cfg: DictConfig) -> None:
     assert cfg.visualize_freq % cfg.log_freq == 0
@@ -107,6 +127,16 @@ def train(cfg: DictConfig) -> None:
 
         # Initialize multiprocessing
         mp.set_start_method("spawn", force=True)
+        input_queues = [mp.Queue() for _ in range(len(models))]
+        output_queue = mp.Queue()
+        processes = []
+
+        # Start worker processes
+        for model, model_cfg, input_queue in zip(models, model_cfgs, input_queues):
+            p = mp.Process(target=worker, args=(
+                input_queue, output_queue, model, model_cfg, model_logger))
+            p.start()
+            processes.append(p)
 
         # outer loop for different epochs
         for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
@@ -115,18 +145,15 @@ def train(cfg: DictConfig) -> None:
             # Iterate over gpus
             processes = []
             output_queue = mp.Queue()
-            for model_id, (model, model_cfg) in enumerate(zip(models, model_cfgs)):
-                p = mp.Process(target=train_clients_one_epoch_on_device, args=(
-                    model_cfg, model, datasets_by_device[model_id], epoch, model_logger, global_params, output_queue))
-                p.start()
-                processes.append(p)
-            for p in processes:
-                p.join()
+            for model_id, (model, model_cfg, input_queue) in enumerate(zip(models, model_cfgs, input_queues)):
+                # Send data to client
+                input_queue.put(
+                    (epoch, datasets_by_device[model_id], global_params))
 
-            # Get client parameters
-            print(f"Received parameters from {output_queue.qsize()} clients")
+            # Receive client parameters
+            print("Waiting for clients to finish training")
             client_params = [output_queue.get()
-                             for _ in range(output_queue.qsize())]
+                             for _ in range(len(models))]
 
             global_params = fed_avg(client_params)
 
@@ -140,6 +167,12 @@ def train(cfg: DictConfig) -> None:
                 model.update_learning_rate()  # update learning rates at end of every epoch
             print(
                 f"End of epoch {epoch} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time} sec")
+
+        # Terminate processes
+        for input_queue in input_queues:
+            input_queue.put(None)  # send stop signal
+        for p in processes:
+            p.join()
 
 
 if __name__ == "__main__":
