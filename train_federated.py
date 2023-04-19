@@ -65,7 +65,7 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
     print(f"Training a client on device {cfg.gpus}")
 
     # Load global parameters into client model
-    model.load_global_params(global_params)
+    model.load_state_dict(global_params)
 
     # Train each client
     for client_dataset in client_datasets:
@@ -113,9 +113,9 @@ def train(cfg: DictConfig) -> None:
             # Iterate over gpus
             processes = []
             output_queue = mp.Queue()
-            for model, model_cfg in zip(models, model_cfgs):
+            for client_id, model, model_cfg in enumerate(zip(models, model_cfgs)):
                 p = mp.Process(target=train_clients_one_epoch_on_device, args=(
-                    model_cfg, model, datasets_by_client, epoch, model_logger, global_params, output_queue))
+                    model_cfg, model, datasets_by_client[client_id], epoch, model_logger, global_params, output_queue))
                 p.start()
                 processes.append(p)
             for p in processes:
@@ -123,16 +123,13 @@ def train(cfg: DictConfig) -> None:
 
             # Get client parameters
             print(f"Received parameters from {output_queue.qsize()} clients")
-            client_params = [output_queue.pop() for _ in range(len(models))]
+            client_params = [output_queue.get() for _ in range(len(models))]
 
             global_params = fed_avg(client_params)
 
             if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
                 print(f"Saving model ({epoch=})")
-                model.G.netG.load_state_dict(global_gen_param)
-                model.D.netD1.load_state_dict(global_disc1_param)
-                model.D.netD2.load_state_dict(global_disc2_param)
-
+                model.load_state_dict(global_params)
                 model.save_networks("latest")
                 model.save_networks(epoch)
 
