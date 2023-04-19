@@ -2,6 +2,7 @@ import torch
 from torch import optim, nn, multiprocessing as mp
 from torchvision import datasets, transforms
 from torch.nn import functional as F
+import copy
 
 
 mp.set_start_method("spawn", force=True)
@@ -48,11 +49,15 @@ class Net(nn.Module):
         return F.log_softmax(x, dim=1)
 
 
+def share_state_dict(state_dict):
+    return {k: v.to("cpu").share_memory_() for k, v in state_dict.items()}
+
+
 def train_epoch(epoch, model, optimizer, loader, global_params, queue, device):
     print("Starting process for", device)
     model.load_state_dict(global_params)
     for batch_idx, (data, target) in enumerate(loader):
-        if batch_idx > 300:
+        if batch_idx > 200:
             break
         data = data.to(device)
         target = target.to(device)
@@ -71,7 +76,7 @@ def train_epoch(epoch, model, optimizer, loader, global_params, queue, device):
                                                                               len(data), len(
                                                                                   loader.dataset),
                                                                               100. * batch_idx / len(loader), loss.data.item()))
-    queue.put(model.state_dict())
+    queue.put(share_state_dict(model.state_dict()))
 
 
 if __name__ == "__main__":
@@ -90,12 +95,13 @@ if __name__ == "__main__":
     p1 = mp.Process(target=train_epoch, args=(
         0, model1, optimizer1, train_loader, global_params, queue, DEV1))
     p2 = mp.Process(target=train_epoch, args=(
-        0, model2, optimizer2, train_loader, global_params, queue, DEV2))
+        0, model2, optimizer2, train_loader, model2.state_dict(), queue, DEV2))
     p1.start()
     p2.start()
 
     p1.join()
     p2.join()
 
+    print("Processes done")
     while queue.qsize() > 0:
         print(queue.get())
