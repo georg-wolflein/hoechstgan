@@ -61,20 +61,6 @@ def train_one_epoch(cfg, model, dataset, epoch, model_logger):
         iter_data_time = time.time()
 
 
-def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_logger, global_params, output_queue: mp.Queue):
-    print(f"Training a client on device {cfg.gpus}")
-
-    # Load global parameters into client model
-    model.load_state_dict(global_params.copy())
-    print(f"Loaded global parameters into client model on device {cfg.gpus}")
-
-    # Train each client
-    for i, client_dataset in enumerate(client_datasets):
-        train_one_epoch(cfg, model, client_dataset, epoch, model_logger)
-        output_queue.put(model.get_state_dict())
-        print(f"Trained {i}th client on device {cfg.gpus}")
-
-
 def share_params(params):
     return {
         model: {
@@ -155,8 +141,10 @@ def train(cfg: DictConfig) -> None:
             # Receive client parameters
             print("Waiting for clients to finish training")
             client_params = [output_queue.get()
-                             for _ in range(len(models))]
+                             for _ in range(len(datasets_by_worker))]
+            print("Received client parameters")
 
+            # Aggregate client parameters
             global_params = fed_avg(client_params)
             del client_params
 
