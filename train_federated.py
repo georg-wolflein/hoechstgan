@@ -66,11 +66,13 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
 
     # Load global parameters into client model
     model.load_state_dict(global_params)
+    print(f"Loaded global parameters into client model on device {cfg.gpus}")
 
     # Train each client
-    for client_dataset in client_datasets:
+    for i, client_dataset in enumerate(client_datasets):
         train_one_epoch(cfg, model, client_dataset, epoch, model_logger)
         output_queue.put(model.get_state_dict())
+        print(f"Trained {i}th client on device {cfg.gpus}")
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
@@ -92,7 +94,7 @@ def train(cfg: DictConfig) -> None:
         # model.print_networks(cfg.verbose)
 
         # Split dataset into clients
-        datasets_by_client = {
+        datasets_by_device = {
             gpu: [datasets[i]
                   for i in range(len(datasets)) if i % len(models) == gpu]
             for gpu in range(len(models))
@@ -113,9 +115,9 @@ def train(cfg: DictConfig) -> None:
             # Iterate over gpus
             processes = []
             output_queue = mp.Queue()
-            for client_id, model, model_cfg in enumerate(zip(models, model_cfgs)):
+            for model_id, (model, model_cfg) in enumerate(zip(models, model_cfgs)):
                 p = mp.Process(target=train_clients_one_epoch_on_device, args=(
-                    model_cfg, model, datasets_by_client[client_id], epoch, model_logger, global_params, output_queue))
+                    model_cfg, model, datasets_by_device[model_id], epoch, model_logger, global_params, output_queue))
                 p.start()
                 processes.append(p)
             for p in processes:
@@ -123,7 +125,8 @@ def train(cfg: DictConfig) -> None:
 
             # Get client parameters
             print(f"Received parameters from {output_queue.qsize()} clients")
-            client_params = [output_queue.get() for _ in range(len(models))]
+            client_params = [output_queue.get()
+                             for _ in range(output_queue.qsize())]
 
             global_params = fed_avg(client_params)
 
@@ -133,7 +136,8 @@ def train(cfg: DictConfig) -> None:
                 model.save_networks("latest")
                 model.save_networks(epoch)
 
-            model.update_learning_rate()  # update learning rates at end of every epoch
+            for model in models:
+                model.update_learning_rate()  # update learning rates at end of every epoch
             print(
                 f"End of epoch {epoch} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time} sec")
 
