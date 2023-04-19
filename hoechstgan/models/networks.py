@@ -44,6 +44,18 @@ def get_norm_layer(norm_type='instance'):
     return norm_layer
 
 
+class LRPolicy:
+    def __init__(self, initial_epoch, n_epochs_initial, n_epochs_decay):
+        self.initial_epoch = initial_epoch
+        self.n_epochs_initial = n_epochs_initial
+        self.n_epochs_decay = n_epochs_decay
+
+    def __call__(self, epoch):
+        lr_l = 1.0 - max(0, epoch + self.initial_epoch -
+                         self.n_epochs_initial) / float(self.n_epochs_decay + 1)
+        return lr_l
+
+
 def get_scheduler(optimizer, cfg):
     """Return a learning rate scheduler
 
@@ -56,11 +68,8 @@ def get_scheduler(optimizer, cfg):
     """
     lr = cfg.learning_rate
     if lr.policy == 'linear':
-        def lambda_rule(epoch):
-            lr_l = 1.0 - max(0, epoch + cfg.initial_epoch -
-                             lr.n_epochs_initial) / float(lr.n_epochs_decay + 1)
-            return lr_l
-        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=lambda_rule)
+        scheduler = lr_scheduler.LambdaLR(optimizer, lr_lambda=LRPolicy(
+            cfg.initial_epoch, lr.n_epochs_initial, lr.n_epochs_decay))
     elif lr.policy == 'step':
         scheduler = lr_scheduler.StepLR(
             optimizer, step_size=lr.decay_iters, gamma=0.1)
@@ -122,7 +131,7 @@ def init_net(net, init_type='normal', init_gain=0.02, gpu_ids=[]):
     Return an initialized network.
     """
     if len(gpu_ids) > 0:
-        assert(torch.cuda.is_available())
+        assert (torch.cuda.is_available())
         net.to(gpu_ids[0])
         net = torch.nn.DataParallel(net, gpu_ids)  # multi-GPUs
     init_weights(net, init_type, init_gain=init_gain)

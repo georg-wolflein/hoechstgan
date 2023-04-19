@@ -76,14 +76,11 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
 def train(cfg: DictConfig) -> None:
     assert cfg.visualize_freq % cfg.log_freq == 0
+    cfg.dataset.num_threads = 0
 
     dataset = create_dataset(cfg)
     dataset_size = len(dataset)
     print(f"Number of training images: {dataset_size}")
-
-    global_disc1_param = {}
-    global_disc2_param = {}
-    global_gen_param = {}
 
     dataset1, dataset2, dataset3, dataset4 = create_4_clients(cfg)
     datasets = [dataset1, dataset2, dataset3, dataset4]
@@ -96,8 +93,8 @@ def train(cfg: DictConfig) -> None:
 
         # Split dataset into clients
         datasets_by_client = {
-            gpu: [dataset[i]
-                  for i in range(len(dataset)) if i % len(len(models)) == gpu]
+            gpu: [datasets[i]
+                  for i in range(len(datasets)) if i % len(models) == gpu]
             for gpu in range(len(models))
         }
 
@@ -128,12 +125,7 @@ def train(cfg: DictConfig) -> None:
             print(f"Received parameters from {output_queue.qsize()} clients")
             client_params = [output_queue.pop() for _ in range(len(models))]
 
-            clients_disc1_param = [client["netD1"] for client in client_params]
-            clients_disc2_param = [client["netD1"] for client in client_params]
-            clients_gen_param = [client["netD1"] for client in client_params]
-
-            global_disc1_param, global_disc2_param, global_gen_param = fed_avg(
-                clients_disc1_param, clients_disc2_param, clients_gen_param)
+            global_params = fed_avg(client_params)
 
             if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
                 print(f"Saving model ({epoch=})")

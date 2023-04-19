@@ -8,37 +8,19 @@ from pathlib import Path
 
 # take list of dicts of clients blocks parameters
 # return dicts of averaged parameteres
-def fed_avg(clients_disc1_param, clients_disc2_param, clients_gen_param):
+def fed_avg(client_params):
     # initialize parameters with last model parameters for the size of the dictionnarie, it will be all overwritten
-    global_disc1_param = clients_disc1_param[0]
-    global_disc2_param = clients_disc2_param[0]
-    global_gen_param = clients_gen_param[0]
+    global_params = client_params[0]
 
-    # avg parameters of discriminator 1
-    for layer in global_disc1_param:
-        for i in range(1, len(clients_disc1_param)):
-            global_disc1_param[layer] = global_disc1_param[layer] + \
-                clients_disc1_param[i][layer]
-        global_disc1_param[layer] = global_disc1_param[layer] / \
-            len(clients_disc1_param)
+    # avg parameters
+    for key, params in global_params.items():
+        for layer in params:
+            for i in range(1, len(client_params)):
+                params[layer] = params[layer] + \
+                    client_params[i][key][layer]
+            params[layer] = params[layer] / len(client_params)
 
-    # avg parameters of discriminator 2
-    for layer in global_disc2_param:
-        for i in range(1, len(clients_disc2_param)):
-            global_disc2_param[layer] = global_disc2_param[layer] + \
-                clients_disc2_param[i][layer]
-        global_disc2_param[layer] = global_disc2_param[layer] / \
-            len(clients_disc2_param)
-
-    # avg parameters of generator
-    for layer in global_gen_param:
-        for i in range(1, len(clients_gen_param)):
-            global_gen_param[layer] = global_gen_param[layer] + \
-                clients_gen_param[i][layer]
-        global_gen_param[layer] = global_gen_param[layer] / \
-            len(clients_gen_param)
-
-    return global_disc1_param, global_disc2_param, global_gen_param
+    return global_params
 
 
 # same as fed_avg but take weights the parameters with the length of the local database
