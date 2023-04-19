@@ -217,3 +217,15 @@ class BaseModel(ABC):
             if net is not None:
                 for param in net.parameters():
                     param.requires_grad = requires_grad
+
+    def get_state_dict(self):
+        return {
+            "net" + name: getattr(self, "net" + name).state_dict()
+            for name in self.model_names if isinstance(name, str)
+        }
+
+    def load_state_dict(self, state_dict):
+        for name in self.model_names:
+            if isinstance(name, str):
+                getattr(self, "net" +
+                        name).load_state_dict(state_dict["net" + name])
