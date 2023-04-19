@@ -75,8 +75,12 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
         print(f"Trained {i}th client on device {cfg.gpus}")
 
 
-def share_state_dict(state_dict):
-    return {k: v.to("cpu").share_memory_() for k, v in state_dict.items()}
+def share_params(params):
+    return {
+        model: {
+            k: v.to("cpu").share_memory_() for k, v in state_dict.items()
+        } for (model, state_dict) in params.items()
+    }
 
 
 def worker(input_queue, output_queue, model, model_cfg, model_logger):
