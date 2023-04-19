@@ -75,6 +75,10 @@ def train_clients_one_epoch_on_device(cfg, model, client_datasets, epoch, model_
         print(f"Trained {i}th client on device {cfg.gpus}")
 
 
+def share_state_dict(state_dict):
+    return {k: v.to("cpu").share_memory_() for k, v in state_dict.items()}
+
+
 def worker(input_queue, output_queue, model, model_cfg, model_logger):
     print(f"Starting worker on {model_cfg.gpus}")
     while True:
@@ -86,13 +90,13 @@ def worker(input_queue, output_queue, model, model_cfg, model_logger):
 
         print(
             f"Loading global parameters into client model on device {model_cfg.gpus}")
-        model.load_state_dict(global_params, map_location=model_cfg.gpus)
+        model.load_state_dict(global_params)
 
         print(f"Training client on device {model_cfg.gpus}")
         train_one_epoch(model_cfg, model, client_dataset, epoch, model_logger)
 
         print(f"Sending parameters from client on device {model_cfg.gpus}")
-        output_queue.put(model.get_state_dict())
+        output_queue.put(share_state_dict(model.get_state_dict()))
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
@@ -107,15 +111,15 @@ def train(cfg: DictConfig) -> None:
     dataset1, dataset2, dataset3, dataset4 = create_4_clients(cfg)
     datasets = [dataset1, dataset2, dataset3, dataset4]
 
-    # Split dataset into clients
-    datasets_by_worker = [(i % len(models), dataset)
-                          for i, dataset in enumerate(datasets)]
-
     with ModelLogger(cfg) as model_logger:
         models, model_cfgs = zip(*[setup_model(cfg, gpu) for gpu in cfg.gpus])
         # model = create_model(cfg)
         # model.setup(cfg)
         # model.print_networks(cfg.verbose)
+
+        # Split dataset into clients
+        datasets_by_worker = [(i % len(models), dataset)
+                              for i, dataset in enumerate(datasets)]
 
         # Get global parameters
         model = models[0]
@@ -150,6 +154,7 @@ def train(cfg: DictConfig) -> None:
                              for _ in range(len(models))]
 
             global_params = fed_avg(client_params)
+            del client_params
 
             if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
                 print(f"Saving model ({epoch=})")
