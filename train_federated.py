@@ -107,18 +107,15 @@ def train(cfg: DictConfig) -> None:
     dataset1, dataset2, dataset3, dataset4 = create_4_clients(cfg)
     datasets = [dataset1, dataset2, dataset3, dataset4]
 
+    # Split dataset into clients
+    datasets_by_worker = [(i % len(models), dataset)
+                          for i, dataset in enumerate(datasets)]
+
     with ModelLogger(cfg) as model_logger:
         models, model_cfgs = zip(*[setup_model(cfg, gpu) for gpu in cfg.gpus])
         # model = create_model(cfg)
         # model.setup(cfg)
         # model.print_networks(cfg.verbose)
-
-        # Split dataset into clients
-        datasets_by_device = {
-            gpu: [datasets[i]
-                  for i in range(len(datasets)) if i % len(models) == gpu]
-            for gpu in range(len(models))
-        }
 
         # Get global parameters
         model = models[0]
@@ -138,17 +135,14 @@ def train(cfg: DictConfig) -> None:
             p.start()
             processes.append(p)
 
-        # outer loop for different epochs
+        # Outer loop for different epochs
         for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
             epoch_start_time = time.time()  # timer for entire epoch
 
-            # Iterate over gpus
-            processes = []
-            output_queue = mp.Queue()
-            for model_id, (model, model_cfg, input_queue) in enumerate(zip(models, model_cfgs, input_queues)):
-                # Send data to client
-                input_queue.put(
-                    (epoch, datasets_by_device[model_id], global_params))
+            # Distribute tasks
+            for model_id, dataset in datasets_by_worker:
+                input_queues[model_id].put(
+                    (epoch, dataset, global_params))
 
             # Receive client parameters
             print("Waiting for clients to finish training")
