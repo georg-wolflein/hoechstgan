@@ -100,7 +100,7 @@ def worker(input_queue, output_queue, model, model_cfg, model_logger):
         train_one_epoch(model_cfg, model, client_dataset, epoch, model_logger)
 
         print(f"Sending parameters from client on device {model_cfg.gpus}")
-        output_queue.put(share_state_dict(model.get_state_dict()))
+        output_queue.put(share_params(model.get_state_dict()))
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")

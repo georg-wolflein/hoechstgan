@@ -152,7 +152,9 @@ class BaseModel(ABC):
                 net = getattr(self, "net" + name)
 
                 if len(self.gpus) > 0 and torch.cuda.is_available():
-                    torch.save(net.module.cpu().state_dict(), save_path)
+                    module = net.module \
+                        if isinstance(net, torch.nn.DataParallel) else net
+                    torch.save(module.cpu().state_dict(), save_path)
                     net.cuda(self.gpus[0])
                 else:
                     torch.save(net.cpu().state_dict(), save_path)
