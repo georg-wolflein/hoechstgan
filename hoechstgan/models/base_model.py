@@ -221,16 +221,21 @@ class BaseModel(ABC):
                     param.requires_grad = requires_grad
 
     def get_state_dict(self):
-        return {
-            "net" + name: getattr(self, "net" + name).state_dict()
-            for name in self.model_names if isinstance(name, str)
-        }
-
-    def load_state_dict(self, state_dict, *args, **kwargs):
+        state_dict = {}
         for name in self.model_names:
             if isinstance(name, str):
-                getattr(self, "net" +
-                        name).load_state_dict(state_dict["net" + name], *args, **kwargs)
+                net = getattr(self, "net" + name)
+                net.cpu()
+                state_dict["net" + name] = net.state_dict()
+                net.device(self.device)
+        return state_dict
+
+    def load_state_dict(self, state_dict):
+        for name in self.model_names:
+            if isinstance(name, str):
+                net = getattr(self, "net" + name)
+                net.load_state_dict(state_dict["net" + name])
+                net.device(self.device)
 
     def share_memory(self, *args, **kwargs):
         for name in self.model_names:
