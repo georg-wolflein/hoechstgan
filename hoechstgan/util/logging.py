@@ -60,7 +60,7 @@ class ModelLogger:
             imgs = [tensor2im(img) for img in visuals.values()]
             imgs = wandb.Image(np.concatenate(imgs, axis=1))
             log_dict["_".join(visuals.keys())] = imgs
-        wandb.log(log_dict, step=step)
+        self.run.log(log_dict, step=step, commit=True)
 
 
 class ClientLogger(ModelLogger):
