@@ -54,9 +54,8 @@ def share_state_dict(state_dict):
     return {k: v.to("cpu").share_memory_() for k, v in state_dict.items()}
 
 
-def train_epoch(epoch, model, optimizer, loader, global_params, queue, device):
-    print("Starting process for", device)
-    model.load_state_dict(global_params)
+def train_epoch(epoch, model, optimizer, loader, device):
+    model.to(device)
     for batch_idx, (data, target) in enumerate(loader):
         if batch_idx > 200:
             break
@@ -77,8 +76,22 @@ def train_epoch(epoch, model, optimizer, loader, global_params, queue, device):
                                                                               len(data), len(
                                                                                   loader.dataset),
                                                                               100. * batch_idx / len(loader), loss.data.item()))
-    queue.put(share_state_dict(model.state_dict()))
-    time.sleep(10)
+    state_dict = model.cpu().state_dict()
+    model.to(device)
+    return state_dict
+
+
+def worker(model, optimizer, loader, in_q, out_q, device):
+    print("Starting worker for", device)
+    while True:
+        global_params = in_q.get()
+        if global_params is None:
+            print("Exiting worker for", device)
+            break
+        model.load_state_dict(global_params)
+        state_dict = train_epoch(
+            0, model, optimizer, loader, device)
+        out_q.put(share_state_dict(state_dict))
 
 
 if __name__ == "__main__":
@@ -86,7 +99,9 @@ if __name__ == "__main__":
     model2 = Net()
 
     global_params = model1.cpu().state_dict()
-    queue = mp.Queue()
+    out_q = mp.Queue()
+    in_q1 = mp.Queue()
+    in_q2 = mp.Queue()
 
     model1.to(DEV1)
     model2.to(DEV2)
@@ -94,16 +109,21 @@ if __name__ == "__main__":
     optimizer1 = optim.SGD(model1.parameters(), 10e-3)
     optimizer2 = optim.SGD(model2.parameters(), 10e-3)
 
-    p1 = mp.Process(target=train_epoch, args=(
-        0, model1, optimizer1, train_loader, global_params, queue, DEV1))
-    p2 = mp.Process(target=train_epoch, args=(
-        0, model2, optimizer2, train_loader, model2.state_dict(), queue, DEV2))
+    p1 = mp.Process(target=worker, args=(
+        model1, optimizer1, train_loader, in_q1, out_q, DEV1))
+    p2 = mp.Process(target=worker, args=(
+        model2, optimizer2, train_loader, in_q2, out_q, DEV2))
     p1.start()
     p2.start()
+
+    in_q1.put(global_params)
+    in_q2.put(global_params)
+    in_q1.put(None)
+    in_q2.put(None)
 
     # p1.join()
     # p2.join()
 
-    print("Processes done")
+    print("Waiting for results...")
     for i in range(2):
-        print(queue.get())
+        print(out_q.get())
