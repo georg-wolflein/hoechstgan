@@ -145,7 +145,9 @@ def train(cfg: DictConfig) -> None:
             print("Received client parameters")
 
             # Aggregate client parameters
+            print("Aggregating client parameters")
             global_params = fed_avg(client_params)
+            print("Deleting client parameters")
             del client_params
 
             if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs

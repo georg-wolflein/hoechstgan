@@ -227,7 +227,7 @@ class BaseModel(ABC):
                 net = getattr(self, "net" + name)
                 net.cpu()
                 state_dict["net" + name] = net.state_dict()
-                net.device(self.device)
+                net.to(self.device)
         return state_dict
 
     def load_state_dict(self, state_dict):
@@ -235,7 +235,7 @@ class BaseModel(ABC):
             if isinstance(name, str):
                 net = getattr(self, "net" + name)
                 net.load_state_dict(state_dict["net" + name])
-                net.device(self.device)
+                net.to(self.device)
 
     def share_memory(self, *args, **kwargs):
         for name in self.model_names:
