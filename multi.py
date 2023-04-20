@@ -121,8 +121,6 @@ if __name__ == "__main__":
 
     in_q1.put(global_params)
     in_q2.put(global_params)
-    in_q1.put(None)
-    in_q2.put(None)
 
     # p1.join()
     # p2.join()
@@ -130,3 +128,6 @@ if __name__ == "__main__":
     print("Waiting for results...")
     for i in range(2):
         print(out_q.get())
+
+    in_q1.put(None)
+    in_q2.put(None)

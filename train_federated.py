@@ -19,7 +19,7 @@ def setup_model(cfg, gpu):
     cfg.gpus = [gpu]
     model = create_model(cfg)
     model.setup(cfg)
-    model.share_memory()
+    # model.share_memory()
     # model.print_networks(cfg.verbose)
     return model, cfg
 
@@ -32,7 +32,8 @@ def train_one_epoch(cfg, model, dataset, epoch, model_logger):
     step = epoch * (dataset_size // cfg.dataset.batch_size)
 
     # Perform one epoch of training
-    for data in tqdm(dataset, desc=f"Epoch {epoch}", total=dataset_size // cfg.dataset.batch_size):
+    # for data in tqdm(dataset, desc=f"Epoch {epoch}", total=dataset_size // cfg.dataset.batch_size):
+    for data in dataset:
         iter_start_time = time.time()  # timer for computation per iteration
 
         step += cfg.dataset.batch_size
@@ -58,6 +59,8 @@ def train_one_epoch(cfg, model, dataset, epoch, model_logger):
             model_logger.log(step, epoch, epoch_iter,
                              losses, t_comp, t_data,
                              visuals)
+            print(
+                f"Epoch {epoch} on device {cfg.gpus} is {epoch_iter / dataset_size * 100:.2f}% complete")
         iter_data_time = time.time()
 
 
@@ -123,6 +126,7 @@ def train(cfg: DictConfig) -> None:
         processes = []
 
         # Start worker processes
+        print("Starting workers")
         for model, model_cfg, input_queue in zip(models, model_cfgs, input_queues):
             p = mp.Process(target=worker, args=(
                 input_queue, output_queue, model, model_cfg, model_logger))
@@ -132,11 +136,14 @@ def train(cfg: DictConfig) -> None:
         # Outer loop for different epochs
         for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
             epoch_start_time = time.time()  # timer for entire epoch
+            print(f"Starting epoch {epoch}")
 
             # Distribute tasks
-            for model_id, dataset in datasets_by_worker:
+            print("Distributing tasks")
+            for i, (model_id, dataset) in enumerate(datasets_by_worker):
+                print(f"Sending a dataset {i} worker {model_id}")
                 input_queues[model_id].put(
-                    (epoch, dataset, global_params))
+                    (epoch, dataset, share_params(global_params)))
 
             # Receive client parameters
             print("Waiting for clients to finish training")
