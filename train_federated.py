@@ -72,14 +72,14 @@ def share_params(params):
     }
 
 
-def worker(input_queue, output_queue, model, model_cfg, model_logger):
+def worker(input_queue, output_queue, model, model_cfg):
     print(f"Starting worker on {model_cfg.gpus}")
     while True:
         data = input_queue.get()
         if data is None:
             print(f"Stopping worker on {model_cfg.gpus}")
             return
-        epoch, client_dataset, global_params = data
+        epoch, client_dataset, global_params, model_logger = data
 
         print(
             f"Loading global parameters into client model on device {model_cfg.gpus}")
@@ -129,7 +129,7 @@ def train(cfg: DictConfig) -> None:
         print("Starting workers")
         for model, model_cfg, input_queue in zip(models, model_cfgs, input_queues):
             p = mp.Process(target=worker, args=(
-                input_queue, output_queue, model, model_cfg, model_logger))
+                input_queue, output_queue, model, model_cfg))
             p.start()
             processes.append(p)
 
@@ -140,10 +140,10 @@ def train(cfg: DictConfig) -> None:
 
             # Distribute tasks
             print("Distributing tasks")
-            for i, (model_id, dataset) in enumerate(datasets_by_worker):
-                print(f"Sending a dataset {i} worker {model_id}")
+            for client_id, (model_id, dataset) in enumerate(datasets_by_worker):
+                print(f"Sending dataset {client_id} worker {model_id}")
                 input_queues[model_id].put(
-                    (epoch, dataset, share_params(global_params)))
+                    (epoch, dataset, share_params(global_params), model_logger.for_client(client_id)))
 
             # Receive client parameters
             print("Waiting for clients to finish training")
