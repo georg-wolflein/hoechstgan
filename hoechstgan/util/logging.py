@@ -21,19 +21,10 @@ def get_api() -> wandb.Api:
     return wandb.Api(dict(entity=WANDB_ENTITY, project=WANDB_PROJECT))
 
 
-class ClientLogger:
-    def __init__(self, model_logger: "ModelLogger", client_id: int):
-        self.model_logger = model_logger
-        self.client_id = client_id
-        self.cfg = model_logger.cfg
-
-    def log(self, *args, **kwargs):
-        return self.model_logger.log(*args, client_id=self.client_id, **kwargs)
-
-
 class ModelLogger:
     def __init__(self, cfg: DictConfig):
         self.cfg = cfg
+        self.client_id = None
 
     def __enter__(self):
         cfg = {
@@ -46,22 +37,20 @@ class ModelLogger:
                    name=self.cfg.name, id=self.cfg.wandb_id,
                    config=cfg)
         self.cfg.wandb_id = wandb.run.id
+        self.wandb_run_id = wandb.run.id
         return self
 
     def __exit__(self, *args, **kwargs):
         wandb.finish()
 
-    def for_client(self, client_id: int) -> ClientLogger:
-        return ClientLogger(self, client_id)
-
-    def log(self, step, epoch, iters, losses, t_comp, t_data, visuals=None, client_id=None):
+    def log(self, step, epoch, iters, losses, t_comp, t_data, visuals=None):
         log_dict = {"epoch": epoch, "iters": iters}
 
         # Log losses
         message = f"({epoch=:d}, {iters=:d}, {t_comp=:f}, {t_data=:f}): "
         message += ", ".join(f"{k:s}={v:.3f}" for (k, v) in losses.items())
-        if client_id is not None:
-            message = f"client {client_id}: " + message
+        if self.client_id is not None:
+            message = f"client {self.client_id}: " + message
         print(message)
 
         log_dict.update({f"loss/{k}": v for (k, v) in losses.items()})
@@ -71,7 +60,22 @@ class ModelLogger:
             imgs = [tensor2im(img) for img in visuals.values()]
             imgs = wandb.Image(np.concatenate(imgs, axis=1))
             log_dict["_".join(visuals.keys())] = imgs
-        if client_id is not None:
-            log_dict = {
-                f"client_{client_id}/{k}": v for (k, v) in log_dict.items()}
         wandb.log(log_dict, step=step)
+
+
+class ClientLogger:
+    def __init__(self, model_logger: "ModelLogger", client_id: int):
+        self.model_logger = model_logger
+        self.client_id = client_id
+        self.cfg = model_logger.cfg
+
+    def __enter__(self):
+        cfg = {
+            **OmegaConf.to_container(self.cfg, resolve=True, throw_on_missing=True),
+            "overrides": " ".join(x
+                                  for x in sys.argv[1:]
+                                  if not x.startswith("+experiment=") and not x.startswith("gpus="))
+        }
+        wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
+                   name=f"{self.cfg.name}_client{self.client_id}", id=None,
+                   config=cfg, group=f"{self.model_logger.wandb_run_id}_clients")
