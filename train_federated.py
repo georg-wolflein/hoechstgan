@@ -71,24 +71,34 @@ def share_params(params):
     }
 
 
-def worker(input_queue, output_queue, model, model_cfg):
+def worker(input_queue, output_queue, model, model_cfg, model_logger):
     print(f"Starting worker on {model_cfg.gpus}")
-    while True:
-        data = input_queue.get()
-        if data is None:
-            print(f"Stopping worker on {model_cfg.gpus}")
-            return
-        epoch, client_dataset, global_params, model_logger = data
+    client_loggers = {}
+    with contextlib.ExitStack() as stack:
+        while True:
+            data = input_queue.get()
+            if data is None:
+                print(f"Stopping worker on {model_cfg.gpus}")
+                return
+            epoch, client_dataset, global_params, client_id = data
 
-        print(
-            f"Loading global parameters into client model on device {model_cfg.gpus}")
-        model.load_state_dict(global_params)
+            if client_id not in client_loggers:
+                client_logger = ClientLogger(
+                    model_logger, client_id)
+                stack.enter_context(client_logger)
+                client_loggers[client_id] = client_logger
+            client_logger = client_loggers[client_id]
 
-        print(f"Training client on device {model_cfg.gpus}")
-        train_one_epoch(model_cfg, model, client_dataset, epoch, model_logger)
+            print(
+                f"Loading global parameters into client model on device {model_cfg.gpus}")
+            model.load_state_dict(global_params)
 
-        print(f"Sending parameters from client on device {model_cfg.gpus}")
-        output_queue.put(share_params(model.get_state_dict()))
+            print(f"Training client on device {model_cfg.gpus}")
+            train_one_epoch(model_cfg, model, client_dataset,
+                            epoch, client_logger)
+
+            print(f"Sending parameters from client on device {model_cfg.gpus}")
+            output_queue.put(share_params(model.get_state_dict()))
 
 
 @hydra.main(config_path="conf", config_name="train", version_base="1.2")
@@ -112,62 +122,59 @@ def train(cfg: DictConfig) -> None:
         # Split dataset into clients
         datasets_by_worker = [(i % len(models), dataset)
                               for i, dataset in enumerate(datasets)]
-        with contextlib.ExitStack() as client_logger_stack:
-            client_loggers = [client_logger_stack.enter_context(ClientLogger(model_logger, i))
-                              for i in range(len(datasets))]
-            # Get global parameters
-            model = models[0]
-            global_params = model.get_state_dict()
-            model.print_networks(cfg.verbose)
+        # Get global parameters
+        model = models[0]
+        global_params = model.get_state_dict()
+        model.print_networks(cfg.verbose)
 
-            # Initialize multiprocessing
-            mp.set_start_method("spawn", force=True)
-            input_queues = [mp.Queue() for _ in range(len(models))]
-            output_queue = mp.Queue()
-            processes = []
+        # Initialize multiprocessing
+        mp.set_start_method("spawn", force=True)
+        input_queues = [mp.Queue() for _ in range(len(models))]
+        output_queue = mp.Queue()
+        processes = []
 
-            # Start worker processes
-            print("Starting workers")
-            for model, model_cfg, input_queue in zip(models, model_cfgs, input_queues):
-                p = mp.Process(target=worker, args=(
-                    input_queue, output_queue, model, model_cfg))
-                p.start()
-                processes.append(p)
+        # Start worker processes
+        print("Starting workers")
+        for model, model_cfg, input_queue in zip(models, model_cfgs, input_queues):
+            p = mp.Process(target=worker, args=(
+                input_queue, output_queue, model, model_cfg, model_logger))
+            p.start()
+            processes.append(p)
 
-            # Outer loop for different epochs
-            for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
-                epoch_start_time = time.time()  # timer for entire epoch
-                print(f"Starting epoch {epoch}")
+        # Outer loop for different epochs
+        for epoch in range(cfg.initial_epoch, cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay + 1):
+            epoch_start_time = time.time()  # timer for entire epoch
+            print(f"Starting epoch {epoch}")
 
-                # Distribute tasks
-                print("Distributing tasks")
-                for client_id, ((model_id, dataset), client_logger) in enumerate(zip(datasets_by_worker, client_loggers)):
-                    print(f"Sending dataset {client_id} worker {model_id}")
-                    input_queues[model_id].put(
-                        (epoch, dataset, share_params(global_params), client_logger))
+            # Distribute tasks
+            print("Distributing tasks")
+            for client_id, (model_id, dataset) in enumerate(datasets_by_worker):
+                print(f"Sending dataset {client_id} worker {model_id}")
+                input_queues[model_id].put(
+                    (epoch, dataset, share_params(global_params), client_id))
 
-                # Receive client parameters
-                print("Waiting for clients to finish training")
-                client_params = [output_queue.get()
-                                 for _ in range(len(datasets_by_worker))]
-                print("Received client parameters")
+            # Receive client parameters
+            print("Waiting for clients to finish training")
+            client_params = [output_queue.get()
+                             for _ in range(len(datasets_by_worker))]
+            print("Received client parameters")
 
-                # Aggregate client parameters
-                print("Aggregating client parameters")
-                global_params = fed_avg(client_params)
-                print("Deleting client parameters")
-                del client_params
+            # Aggregate client parameters
+            print("Aggregating client parameters")
+            global_params = fed_avg(client_params)
+            print("Deleting client parameters")
+            del client_params
 
-                if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
-                    print(f"Saving model ({epoch=})")
-                    model.load_state_dict(global_params)
-                    model.save_networks("latest")
-                    model.save_networks(epoch)
+            if epoch % cfg.save_epoch_freq == 0:              # cache our model every <save_epoch_freq> epochs
+                print(f"Saving model ({epoch=})")
+                model.load_state_dict(global_params)
+                model.save_networks("latest")
+                model.save_networks(epoch)
 
-                for model in models:
-                    model.update_learning_rate()  # update learning rates at end of every epoch
-                print(
-                    f"End of epoch {epoch} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time} sec")
+            for model in models:
+                model.update_learning_rate()  # update learning rates at end of every epoch
+            print(
+                f"End of epoch {epoch} / {cfg.learning_rate.n_epochs_initial + cfg.learning_rate.n_epochs_decay:d} \t Time Taken: {time.time() - epoch_start_time} sec")
 
         # Terminate processes
         for input_queue in input_queues:
