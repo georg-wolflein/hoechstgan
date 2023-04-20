@@ -6,23 +6,8 @@ import copy
 import time
 
 
-mp.set_start_method("spawn", force=True)
 DEV1 = "cuda:0"
 DEV2 = "cuda:1"
-
-train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=64, shuffle=True)
-test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=False, transform=transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Normalize((0.1307,), (0.3081,))
-    ])),
-    batch_size=64, shuffle=True)
 
 
 class Net(nn.Module):
@@ -88,13 +73,31 @@ def worker(model, optimizer, loader, in_q, out_q, device):
         if global_params is None:
             print("Exiting worker for", device)
             break
+        print("Loading global params for", device)
         model.load_state_dict(global_params)
+        print("Training for", device)
         state_dict = train_epoch(
             0, model, optimizer, loader, device)
+        print("Sending results for", device)
         out_q.put(share_state_dict(state_dict))
 
 
 if __name__ == "__main__":
+    mp.set_start_method("spawn", force=True)
+    train_loader = torch.utils.data.DataLoader(
+        datasets.MNIST('../data', train=True, download=True,
+                       transform=transforms.Compose([
+                           transforms.ToTensor(),
+                           transforms.Normalize((0.1307,), (0.3081,))
+                       ])),
+        batch_size=64, shuffle=True, num_workers=0)
+    test_loader = torch.utils.data.DataLoader(
+        datasets.MNIST('../data', train=False, transform=transforms.Compose([
+            transforms.ToTensor(),
+            transforms.Normalize((0.1307,), (0.3081,))
+        ])),
+        batch_size=64, shuffle=True, num_workers=0)
+
     model1 = Net()
     model2 = Net()
 
