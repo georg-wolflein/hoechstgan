@@ -59,8 +59,6 @@ def train_one_epoch(cfg, model, dataset, epoch, model_logger):
             model_logger.log(step, epoch, epoch_iter,
                              losses, t_comp, t_data,
                              visuals)
-            print(
-                f"Epoch {epoch} on device {cfg.gpus} is {epoch_iter / dataset_size * 100:.2f}% complete")
         iter_data_time = time.time()
 
 

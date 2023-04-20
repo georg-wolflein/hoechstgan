@@ -60,6 +60,8 @@ class ModelLogger:
         # Log losses
         message = f"({epoch=:d}, {iters=:d}, {t_comp=:f}, {t_data=:f}): "
         message += ", ".join(f"{k:s}={v:.3f}" for (k, v) in losses.items())
+        if client_id is not None:
+            message = f"client {client_id}: " + message
         print(message)
 
         log_dict.update({f"loss/{k}": v for (k, v) in losses.items()})
@@ -69,6 +71,7 @@ class ModelLogger:
             imgs = [tensor2im(img) for img in visuals.values()]
             imgs = wandb.Image(np.concatenate(imgs, axis=1))
             log_dict["_".join(visuals.keys())] = imgs
-        log_dict = {
-            f"client_{client_id}/{k}": v for (k, v) in log_dict.items()}
+        if client_id is not None:
+            log_dict = {
+                f"client_{client_id}/{k}": v for (k, v) in log_dict.items()}
         wandb.log(log_dict, step=step)
