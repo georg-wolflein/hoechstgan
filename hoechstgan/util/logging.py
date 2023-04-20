@@ -33,15 +33,15 @@ class ModelLogger:
                                   for x in sys.argv[1:]
                                   if not x.startswith("+experiment=") and not x.startswith("gpus="))
         }
-        wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
-                   name=self.cfg.name, id=self.cfg.wandb_id,
-                   config=cfg)
-        self.cfg.wandb_id = wandb.run.id
-        self.wandb_run_id = wandb.run.id
+        self.run = wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
+                              name=self.cfg.name, id=self.cfg.wandb_id,
+                              config=cfg)
+        self.cfg.wandb_id = self.run.id
+        self.wandb_run_id = self.run.id
         return self
 
     def __exit__(self, *args, **kwargs):
-        wandb.finish()
+        self.run.finish()
 
     def log(self, step, epoch, iters, losses, t_comp, t_data, visuals=None):
         log_dict = {"epoch": epoch, "iters": iters}
@@ -63,8 +63,8 @@ class ModelLogger:
         wandb.log(log_dict, step=step)
 
 
-class ClientLogger:
-    def __init__(self, model_logger: "ModelLogger", client_id: int):
+class ClientLogger(ModelLogger):
+    def __init__(self, model_logger: ModelLogger, client_id: int):
         self.model_logger = model_logger
         self.client_id = client_id
         self.cfg = model_logger.cfg
@@ -76,6 +76,9 @@ class ClientLogger:
                                   for x in sys.argv[1:]
                                   if not x.startswith("+experiment=") and not x.startswith("gpus="))
         }
-        wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
-                   name=f"{self.cfg.name}_client{self.client_id}", id=None,
-                   config=cfg, group=f"{self.model_logger.wandb_run_id}_clients")
+        self.run = wandb.init(entity=WANDB_ENTITY, project=WANDB_PROJECT,
+                              name=f"{self.cfg.name}_client{self.client_id}", id=None,
+                              config=cfg, group=f"{self.model_logger.wandb_run_id}_clients")
+        self.run_id = self.run.id
+        self.wandb_run_id = self.run.id
+        return self
