@@ -85,7 +85,7 @@ if __name__ == "__main__":
     model1 = Net()
     model2 = Net()
 
-    global_params = model1.state_dict()
+    global_params = model1.cpu().state_dict()
     queue = mp.Queue()
 
     model1.to(DEV1)
